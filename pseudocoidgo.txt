@@ -1,0 +1,58 @@
+Fluxograma - Estrutura Geral
+
+    Início - Cliente e Servidor
+        Cliente: Inicia e envia mensagem de descoberta em broadcast.
+        Servidor: Inicia e escuta mensagens de descoberta.
+
+    Subserviço de Descoberta
+        Cliente envia uma mensagem de descoberta para o servidor.
+        Servidor responde ao cliente com seu IP e registra o cliente na tabela de participantes.
+
+    Subserviço de Processamento - Envio de Requisições
+        Cliente lê número da entrada padrão e envia ao servidor como uma requisição.
+        Servidor recebe a requisição, atualiza a variável de soma e registra o número de requisição.
+
+    Sincronização e Confirmação
+        Servidor responde com o valor da soma e confirmação.
+        Cliente verifica a resposta. Se houver timeout, reenvia a requisição.
+
+    Encerramento
+        Cliente: Ao receber comando de encerramento, desconecta.
+        Servidor: Atualiza status do cliente, se necessário, e encerra.
+
+
+
+########################################################################################
+Pseudocódigo Simplificado
+
+plaintext
+
+Iniciar Servidor
+    Abrir porta UDP para comunicação
+    Exibir status inicial (data, hora, num_reqs = 0, total_sum = 0)
+    Enquanto Servidor estiver ativo
+        Se receber mensagem DESC (Descoberta) de um cliente
+            Registrar cliente na tabela de participantes
+            Responder com endereço IP e status inicial
+        Se receber REQ (Requisição) de um cliente
+            Validar número de sequência da requisição
+            Atualizar soma acumulada e contador de requisições
+            Responder cliente com confirmação e soma parcial
+            Exibir atualização no console
+        Se receber requisição duplicada
+            Exibir mensagem de duplicação e último estado
+    Fim-Enquanto
+
+Iniciar Cliente
+    Solicitar porta UDP
+    Enviar mensagem de DESC (Descoberta) para o servidor
+    Esperar resposta e registrar endereço do servidor
+    Enquanto Cliente estiver ativo
+        Ler próximo número do usuário
+        Enviar REQ para o servidor com número e valor lido
+        Se timeout, Reenviar REQ
+        Se receber ACK
+            Exibir confirmação de requisição e soma parcial
+    Fim-Enquanto
+Fim
+########################################################################################
