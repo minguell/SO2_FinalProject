@@ -1,142 +1,160 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
+#include <stdlib.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <errno.h>
-#include <unistd.h>
 #include <pthread.h>
+#include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
+#define LISTEN_PORT 4000
 #define BUFFER_SIZE 1024
-#define SERVER_PORT 4000
-#define DISCOVERY_PORT 4001
-#define TIMEOUT 5
+#define NUM_MAX_CLIENT 10
 
-void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
-void process_server_response(int sockfd, struct sockaddr_in *server_addr);
-void send_number(int sockfd, struct sockaddr_in *server_addr, int number);
-void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number);
+// Estrutura para armazenar informações de cada cliente
+struct client_info {
+    struct sockaddr_in client_addr;
+    int client_len;
+    char is_active;
+};
+
+// Variáveis globais
+struct client_info client_info_array[NUM_MAX_CLIENT];
+pthread_mutex_t lock;
+int total_sum = 0;
+int num_reqs = 0;
+
+// Prototipação das funções
+void init_client_info();
+void* client_handler(void *arg);
+void process_request(const char *buffer, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
+void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum);
+void exibirStatusInicial(int num_reqs, int total_sum);
 
 int main() {
-    int sockfd;
-    struct sockaddr_in server_addr;
+    int server_sockfd;
+    struct sockaddr_in server_addr, client_addr;
+    pthread_t threads[NUM_MAX_CLIENT];
     char buffer[BUFFER_SIZE];
-    int number;
+    socklen_t client_len = sizeof(client_addr);
+
+    // Inicializa as informações dos clientes
+    init_client_info();
 
     // Cria o socket UDP
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("[client] Could not create socket");
+    if ((server_sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("[server] Could not create socket");
         exit(EXIT_FAILURE);
     }
+    printf("[server] Socket created.\n");
 
-    // Configura o endereço do servidor
-    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(LISTEN_PORT);
 
-    // Envia mensagem de descoberta
-    send_discovery_message(sockfd, &server_addr);
+    if (bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("[server] Bind failed");
+        exit(EXIT_FAILURE);
+    }
+    printf("[server] Bind done.\n");
 
-    // Processa a resposta do servidor
-    process_server_response(sockfd, &server_addr);
+    // Exibe o status inicial
+    exibirStatusInicial(num_reqs, total_sum);
 
-    // Loop para enviar números ao servidor
+    printf("[server] Listening for clients...\n");
+
     while (1) {
-        printf("[client] Enter a number to send to the server: ");
-        if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
-            number = atoi(buffer);
-            send_number(sockfd, &server_addr, number);
+        int n = recvfrom(server_sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        if (n < 0) {
+            perror("[server] Error receiving data");
+            continue;
+        }
+        buffer[n] = '\0';
+
+        // Cria uma thread para processar a requisição
+        struct client_info *client_data = malloc(sizeof(struct client_info));
+        client_data->client_addr = client_addr;
+        client_data->client_len = client_len;
+        if (pthread_create(&threads[num_reqs % NUM_MAX_CLIENT], NULL, client_handler, (void *)client_data) != 0) {
+            perror("[server] Error creating thread");
+            free(client_data);
+            continue;
         }
     }
 
-    close(sockfd);
+    close(server_sockfd);
     return 0;
 }
 
-void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
-    struct sockaddr_in broadcast_addr;
-    char message[] = "DISCOVERY";
-    int broadcast = 1;
-
-    // Configura o endereço de broadcast
-    memset(&broadcast_addr, 0, sizeof(broadcast_addr));
-    broadcast_addr.sin_family = AF_INET;
-    broadcast_addr.sin_port = htons(DISCOVERY_PORT);
-    broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-
-    // Habilita o modo de broadcast
-    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) < 0) {
-        perror("[client] Error setting broadcast option");
-        exit(EXIT_FAILURE);
+// Inicializa as informações dos clientes
+void init_client_info() {
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+        client_info_array[i].is_active = 0;
     }
-
-    // Envia a mensagem de descoberta
-    if (sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
-        perror("[client] Error sending discovery message");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("[client] Discovery message sent\n");
+    pthread_mutex_unlock(&lock);
 }
 
-void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
+// Função que a thread executa para cada cliente
+void* client_handler(void *arg) {
+    struct client_info *client_data = (struct client_info *)arg;
     char buffer[BUFFER_SIZE];
-    socklen_t addr_len = sizeof(*server_addr);
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    // Aguarda a resposta do servidor
-    if (recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
-        perror("[client] Error receiving server response");
-        exit(EXIT_FAILURE);
+    if (sockfd < 0) {
+        perror("[server] Could not create socket");
+        free(client_data);
+        pthread_exit(NULL);
     }
 
-    buffer[BUFFER_SIZE - 1] = '\0';
-    printf("[client] Server response: %s\n", buffer);
+    // Recebe a mensagem do cliente
+    int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_data->client_addr, &client_data->client_len);
+    if (n < 0) {
+        perror("[server] Error receiving data");
+        close(sockfd);
+        free(client_data);
+        pthread_exit(NULL);
+    }
+    buffer[n] = '\0';
+
+    // Processa a requisição
+    process_request(buffer, &client_data->client_addr, client_data->client_len, sockfd);
+
+    close(sockfd);
+    free(client_data);
+    pthread_exit(NULL);
 }
 
-void send_number(int sockfd, struct sockaddr_in *server_addr, int number) {
-    char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d", number);
+// Processa a requisição recebida
+void process_request(const char *buffer, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd) {
+    int num = atoi(buffer);
 
-    // Envia o número ao servidor
-    if (sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
-        perror("[client] Error sending number");
-        return;
-    }
+    pthread_mutex_lock(&lock);
+    total_sum += num;
+    num_reqs++;
+    pthread_mutex_unlock(&lock);
 
-    printf("[client] Sent number: %d\n", number);
+    printf("[server] Received number: %d, Total sum: %d, Number of requests: %d\n", num, total_sum, num_reqs);
 
-    // Configura o timeout para receber a confirmação (ACK)
-    handle_timeout(sockfd, server_addr, number);
+    // Envia a confirmação (ACK) ao cliente
+    send_ack(sockfd, client_addr, client_len, total_sum);
 }
 
-void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number) {
-    char buffer[BUFFER_SIZE];
-    struct timeval tv;
-    fd_set readfds;
-    socklen_t addr_len = sizeof(*server_addr);
+// Envia a confirmação (ACK) ao cliente
+void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum) {
+    char ack_message[BUFFER_SIZE];
+    snprintf(ack_message, BUFFER_SIZE, "ACK: Total sum = %d", sum);
+    sendto(sockfd, ack_message, strlen(ack_message), 0, (struct sockaddr *)client_addr, client_len);
+}
 
-    // Configura o timeout
-    tv.tv_sec = TIMEOUT;
-    tv.tv_usec = 0;
-
-    FD_ZERO(&readfds);
-    FD_SET(sockfd, &readfds);
-
-    // Aguarda a confirmação (ACK) do servidor
-    int retval = select(sockfd + 1, &readfds, NULL, NULL, &tv);
-    if (retval == -1) {
-        perror("[client] Error in select");
-    } else if (retval == 0) {
-        printf("[client] Timeout, resending number: %d\n", number);
-        send_number(sockfd, server_addr, number);
-    } else {
-        if (recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
-            perror("[client] Error receiving ACK");
-        } else {
-            buffer[BUFFER_SIZE - 1] = '\0';
-            printf("[client] Server ACK: %s\n", buffer);
-        }
-    }
+// Exibe o status inicial
+void exibirStatusInicial(int num_reqs, int total_sum) {
+    time_t t = time(NULL);
+    struct tm *now = localtime(&t);
+    printf("Status Inicial:\n");
+    printf("Data: %d-%02d-%02d\n", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
+    printf("Hora: %02d:%02d:%02d\n", now->tm_hour, now->tm_min, now->tm_sec);
+    printf("Número de Requisições: %d\n", num_reqs);
+    printf("Soma Total: %d\n", total_sum);
 }

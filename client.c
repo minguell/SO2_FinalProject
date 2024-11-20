@@ -105,6 +105,8 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number) {
         return;
     }
 
+    printf("[client] Sent number: %d\n", number);
+
     // Configura o timeout para receber a confirmação (ACK)
     handle_timeout(sockfd, server_addr, number);
 }
