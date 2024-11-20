@@ -26,13 +26,18 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
 void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void* read_input(void *arg);
 
-int main() {
+int main(int argc, char *argv[]) {
     int sockfd;
     struct sockaddr_in server_addr;
     char buffer[BUFFER_SIZE];
     int number;
     int seq_num = 0;
-    pthread_t input_thread;
+
+    // Portas padrão ou fornecidas via argumentos
+    int server_port = (argc > 1) ? atoi(argv[1]) : SERVER_PORT;
+    int discovery_port = (argc > 2) ? atoi(argv[2]) : DISCOVERY_PORT;
+
+    printf("[client] Using server port: %d, discovery port: %d\n", server_port, discovery_port);
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -43,19 +48,13 @@ int main() {
     // Configura o endereço do servidor
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_port = htons(server_port);
 
     // Envia mensagem de descoberta
     send_discovery_message(sockfd, &server_addr);
 
     // Processa a resposta do servidor
     process_server_response(sockfd, &server_addr);
-
-    // Cria uma thread para leitura de entrada
-    if (pthread_create(&input_thread, NULL, read_input, (void *)&sockfd) != 0) {
-        perror("[client] Error creating input thread");
-        exit(EXIT_FAILURE);
-    }
 
     // Loop para enviar números ao servidor
     while (1) {
@@ -69,6 +68,7 @@ int main() {
     close(sockfd);
     return 0;
 }
+
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct sockaddr_in broadcast_addr;
