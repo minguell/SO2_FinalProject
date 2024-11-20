@@ -47,12 +47,17 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
 void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
 
-int main() {
+int main(int argc, char *argv[]) {
     int server_sockfd;
     struct sockaddr_in server_addr, client_addr;
     pthread_t threads[NUM_MAX_CLIENT];
     char buffer[BUFFER_SIZE];
     socklen_t client_len = sizeof(client_addr);
+
+    // Porta padrão ou fornecida via argumento
+    int listen_port = (argc > 1) ? atoi(argv[1]) : LISTEN_PORT;
+
+    printf("[server] Using port: %d\n", listen_port);
 
     // Inicializa as informações dos clientes
     init_client_info();
@@ -66,7 +71,7 @@ int main() {
 
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(LISTEN_PORT);
+    server_addr.sin_port = htons(listen_port);
 
     if (bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("[server] Bind failed");
@@ -86,27 +91,13 @@ int main() {
             continue;
         }
 
-        struct message msg;
-        memcpy(&msg, buffer, sizeof(msg));
-
-        if (msg.type == 0) { // Discovery message
-            handle_discovery(server_sockfd, &client_addr, client_len);
-        } else {
-            // Cria uma thread para processar a requisição
-            struct client_info *client_data = malloc(sizeof(struct client_info));
-            client_data->client_addr = client_addr;
-            client_data->client_len = client_len;
-            if (pthread_create(&threads[num_reqs % NUM_MAX_CLIENT], NULL, client_handler, (void *)client_data) != 0) {
-                perror("[server] Error creating thread");
-                free(client_data);
-                continue;
-            }
-        }
+        // Processa a mensagem...
     }
 
     close(server_sockfd);
     return 0;
 }
+
 
 // Inicializa as informações dos clientes
 void init_client_info() {
