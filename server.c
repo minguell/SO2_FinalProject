@@ -9,6 +9,7 @@
 #include <errno.h>
 
 #define LISTEN_PORT 4000
+#define DISCOVERY_PORT 4001
 #define BUFFER_SIZE 1024
 #define NUM_MAX_CLIENT 10
 
@@ -42,6 +43,9 @@ void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len,
 void exibirStatusInicial(int num_reqs, int total_sum);
 int find_client(struct sockaddr_in *client_addr);
 void update_client_info(int client_index, int seq_num, int value);
+void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len);
+void read_total_sum(int *num_reqs, int *total_sum);
+void write_total_sum(int value);
 
 int main() {
     int server_sockfd;
@@ -85,14 +89,18 @@ int main() {
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
 
-        // Cria uma thread para processar a requisição
-        struct client_info *client_data = malloc(sizeof(struct client_info));
-        client_data->client_addr = client_addr;
-        client_data->client_len = client_len;
-        if (pthread_create(&threads[num_reqs % NUM_MAX_CLIENT], NULL, client_handler, (void *)client_data) != 0) {
-            perror("[server] Error creating thread");
-            free(client_data);
-            continue;
+        if (msg.type == 0) { // Discovery message
+            handle_discovery(server_sockfd, &client_addr, client_len);
+        } else {
+            // Cria uma thread para processar a requisição
+            struct client_info *client_data = malloc(sizeof(struct client_info));
+            client_data->client_addr = client_addr;
+            client_data->client_len = client_len;
+            if (pthread_create(&threads[num_reqs % NUM_MAX_CLIENT], NULL, client_handler, (void *)client_data) != 0) {
+                perror("[server] Error creating thread");
+                free(client_data);
+                continue;
+            }
         }
     }
 
@@ -171,10 +179,7 @@ void process_request(struct message *msg, struct sockaddr_in *client_addr, sockl
         update_client_info(client_index, msg->seq_num, msg->value);
     }
 
-    pthread_mutex_lock(&lock);
-    total_sum += msg->value;
-    num_reqs++;
-    pthread_mutex_unlock(&lock);
+    write_total_sum(msg->value);
 
     printf("[server] Received number: %d, Total sum: %d, Number of requests: %d\n", msg->value, total_sum, num_reqs);
 
@@ -221,5 +226,33 @@ void update_client_info(int client_index, int seq_num, int value) {
     pthread_mutex_lock(&lock);
     client_info_array[client_index].last_seq_num = seq_num;
     client_info_array[client_index].partial_sum += value;
+    pthread_mutex_unlock(&lock);
+}
+
+// Lida com a mensagem de descoberta
+void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len) {
+    printf("[server] Discovery message received from %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+
+    struct message response;
+    response.type = 0; // Discovery response type
+    response.seq_num = 0;
+    response.value = 0;
+
+    sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)client_addr, client_len);
+}
+
+// Função para leitura do total_sum e num_reqs
+void read_total_sum(int *num_reqs, int *total_sum) {
+    pthread_mutex_lock(&lock);
+    *num_reqs = num_reqs;
+    *total_sum = total_sum;
+    pthread_mutex_unlock(&lock);
+}
+
+// Função para escrita do total_sum e incremento do num_reqs
+void write_total_sum(int value) {
+    pthread_mutex_lock(&lock);
+    total_sum += value;
+    num_reqs++;
     pthread_mutex_unlock(&lock);
 }

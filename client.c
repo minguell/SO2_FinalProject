@@ -24,6 +24,7 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
 void process_server_response(int sockfd, struct sockaddr_in *server_addr);
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
+void* read_input(void *arg);
 
 int main() {
     int sockfd;
@@ -31,6 +32,7 @@ int main() {
     char buffer[BUFFER_SIZE];
     int number;
     int seq_num = 0;
+    pthread_t input_thread;
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -48,6 +50,12 @@ int main() {
 
     // Processa a resposta do servidor
     process_server_response(sockfd, &server_addr);
+
+    // Cria uma thread para leitura de entrada
+    if (pthread_create(&input_thread, NULL, read_input, (void *)&sockfd) != 0) {
+        perror("[client] Error creating input thread");
+        exit(EXIT_FAILURE);
+    }
 
     // Loop para enviar números ao servidor
     while (1) {
@@ -149,4 +157,27 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
             printf("[client] Server ACK: Total sum = %d\n", msg.value);
         }
     }
+}
+
+void* read_input(void *arg) {
+    int sockfd = *(int *)arg;
+    char buffer[BUFFER_SIZE];
+    int number;
+    int seq_num = 0;
+    struct sockaddr_in server_addr;
+
+    // Configura o endereço do servidor
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(SERVER_PORT);
+
+    while (1) {
+        printf("[client] Enter a number to send to the server: ");
+        if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
+            number = atoi(buffer);
+            send_number(sockfd, &server_addr, number, seq_num++);
+        }
+    }
+
+    return NULL;
 }
