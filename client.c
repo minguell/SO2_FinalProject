@@ -14,16 +14,23 @@
 #define DISCOVERY_PORT 4001
 #define TIMEOUT 5
 
+struct message {
+    int type;
+    int seq_num;
+    int value;
+};
+
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
 void process_server_response(int sockfd, struct sockaddr_in *server_addr);
-void send_number(int sockfd, struct sockaddr_in *server_addr, int number);
-void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number);
+void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
+void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 
 int main() {
     int sockfd;
     struct sockaddr_in server_addr;
     char buffer[BUFFER_SIZE];
     int number;
+    int seq_num = 0;
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -47,7 +54,7 @@ int main() {
         printf("[client] Enter a number to send to the server: ");
         if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
             number = atoi(buffer);
-            send_number(sockfd, &server_addr, number);
+            send_number(sockfd, &server_addr, number, seq_num++);
         }
     }
 
@@ -57,7 +64,10 @@ int main() {
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct sockaddr_in broadcast_addr;
-    char message[] = "DISCOVERY";
+    struct message msg;
+    msg.type = 0; // Discovery type
+    msg.seq_num = 0;
+    msg.value = 0;
     int broadcast = 1;
 
     // Configura o endereço de broadcast
@@ -73,7 +83,7 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     }
 
     // Envia a mensagem de descoberta
-    if (sendto(sockfd, message, strlen(message), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
         perror("[client] Error sending discovery message");
         exit(EXIT_FAILURE);
     }
@@ -82,37 +92,38 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
 }
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
-    char buffer[BUFFER_SIZE];
+    struct message msg;
     socklen_t addr_len = sizeof(*server_addr);
 
     // Aguarda a resposta do servidor
-    if (recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
+    if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
         perror("[client] Error receiving server response");
         exit(EXIT_FAILURE);
     }
 
-    buffer[BUFFER_SIZE - 1] = '\0';
-    printf("[client] Server response: %s\n", buffer);
+    printf("[client] Server response received. Server address: %s:%d\n", inet_ntoa(server_addr->sin_addr), ntohs(server_addr->sin_port));
 }
 
-void send_number(int sockfd, struct sockaddr_in *server_addr, int number) {
-    char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%d", number);
+void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num) {
+    struct message msg;
+    msg.type = 1; // Request type
+    msg.seq_num = seq_num;
+    msg.value = number;
 
     // Envia o número ao servidor
-    if (sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
         perror("[client] Error sending number");
         return;
     }
 
-    printf("[client] Sent number: %d\n", number);
+    printf("[client] Sent number: %d with sequence number: %d\n", number, seq_num);
 
     // Configura o timeout para receber a confirmação (ACK)
-    handle_timeout(sockfd, server_addr, number);
+    handle_timeout(sockfd, server_addr, number, seq_num);
 }
 
-void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number) {
-    char buffer[BUFFER_SIZE];
+void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num) {
+    struct message msg;
     struct timeval tv;
     fd_set readfds;
     socklen_t addr_len = sizeof(*server_addr);
@@ -129,14 +140,13 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number) {
     if (retval == -1) {
         perror("[client] Error in select");
     } else if (retval == 0) {
-        printf("[client] Timeout, resending number: %d\n", number);
-        send_number(sockfd, server_addr, number);
+        printf("[client] Timeout, resending number: %d with sequence number: %d\n", number, seq_num);
+        send_number(sockfd, server_addr, number, seq_num);
     } else {
-        if (recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
+        if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
             perror("[client] Error receiving ACK");
         } else {
-            buffer[BUFFER_SIZE - 1] = '\0';
-            printf("[client] Server ACK: %s\n", buffer);
+            printf("[client] Server ACK: Total sum = %d\n", msg.value);
         }
     }
 }

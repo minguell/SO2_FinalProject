@@ -16,7 +16,16 @@
 struct client_info {
     struct sockaddr_in client_addr;
     int client_len;
+    int last_seq_num;
+    int partial_sum;
     char is_active;
+};
+
+// Estrutura para mensagens
+struct message {
+    int type;
+    int seq_num;
+    int value;
 };
 
 // Variáveis globais
@@ -28,9 +37,11 @@ int num_reqs = 0;
 // Prototipação das funções
 void init_client_info();
 void* client_handler(void *arg);
-void process_request(const char *buffer, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
+void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
 void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum);
 void exibirStatusInicial(int num_reqs, int total_sum);
+int find_client(struct sockaddr_in *client_addr);
+void update_client_info(int client_index, int seq_num, int value);
 
 int main() {
     int server_sockfd;
@@ -70,7 +81,9 @@ int main() {
             perror("[server] Error receiving data");
             continue;
         }
-        buffer[n] = '\0';
+
+        struct message msg;
+        memcpy(&msg, buffer, sizeof(msg));
 
         // Cria uma thread para processar a requisição
         struct client_info *client_data = malloc(sizeof(struct client_info));
@@ -92,6 +105,8 @@ void init_client_info() {
     pthread_mutex_lock(&lock);
     for (int i = 0; i < NUM_MAX_CLIENT; i++) {
         client_info_array[i].is_active = 0;
+        client_info_array[i].last_seq_num = -1;
+        client_info_array[i].partial_sum = 0;
     }
     pthread_mutex_unlock(&lock);
 }
@@ -116,10 +131,12 @@ void* client_handler(void *arg) {
         free(client_data);
         pthread_exit(NULL);
     }
-    buffer[n] = '\0';
+
+    struct message msg;
+    memcpy(&msg, buffer, sizeof(msg));
 
     // Processa a requisição
-    process_request(buffer, &client_data->client_addr, client_data->client_len, sockfd);
+    process_request(&msg, &client_data->client_addr, client_data->client_len, sockfd);
 
     close(sockfd);
     free(client_data);
@@ -127,15 +144,39 @@ void* client_handler(void *arg) {
 }
 
 // Processa a requisição recebida
-void process_request(const char *buffer, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd) {
-    int num = atoi(buffer);
+void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd) {
+    int client_index = find_client(client_addr);
+
+    if (client_index == -1) {
+        printf("[server] New client connected.\n");
+        pthread_mutex_lock(&lock);
+        for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+            if (!client_info_array[i].is_active) {
+                client_info_array[i].client_addr = *client_addr;
+                client_info_array[i].client_len = client_len;
+                client_info_array[i].is_active = 1;
+                client_info_array[i].last_seq_num = msg->seq_num;
+                client_info_array[i].partial_sum = msg->value;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+    } else {
+        if (msg->seq_num <= client_info_array[client_index].last_seq_num) {
+            printf("[server] Duplicate or out-of-order message received.\n");
+            send_ack(sockfd, client_addr, client_len, client_info_array[client_index].partial_sum);
+            return;
+        }
+
+        update_client_info(client_index, msg->seq_num, msg->value);
+    }
 
     pthread_mutex_lock(&lock);
-    total_sum += num;
+    total_sum += msg->value;
     num_reqs++;
     pthread_mutex_unlock(&lock);
 
-    printf("[server] Received number: %d, Total sum: %d, Number of requests: %d\n", num, total_sum, num_reqs);
+    printf("[server] Received number: %d, Total sum: %d, Number of requests: %d\n", msg->value, total_sum, num_reqs);
 
     // Envia a confirmação (ACK) ao cliente
     send_ack(sockfd, client_addr, client_len, total_sum);
@@ -143,9 +184,12 @@ void process_request(const char *buffer, struct sockaddr_in *client_addr, sockle
 
 // Envia a confirmação (ACK) ao cliente
 void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum) {
-    char ack_message[BUFFER_SIZE];
-    snprintf(ack_message, BUFFER_SIZE, "ACK: Total sum = %d", sum);
-    sendto(sockfd, ack_message, strlen(ack_message), 0, (struct sockaddr *)client_addr, client_len);
+    struct message ack_msg;
+    ack_msg.type = 1; // ACK type
+    ack_msg.seq_num = 0;
+    ack_msg.value = sum;
+
+    sendto(sockfd, &ack_msg, sizeof(ack_msg), 0, (struct sockaddr *)client_addr, client_len);
 }
 
 // Exibe o status inicial
@@ -157,4 +201,25 @@ void exibirStatusInicial(int num_reqs, int total_sum) {
     printf("Hora: %02d:%02d:%02d\n", now->tm_hour, now->tm_min, now->tm_sec);
     printf("Número de Requisições: %d\n", num_reqs);
     printf("Soma Total: %d\n", total_sum);
+}
+
+// Encontra o índice do cliente na tabela
+int find_client(struct sockaddr_in *client_addr) {
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+        if (client_info_array[i].is_active && memcmp(&client_info_array[i].client_addr, client_addr, sizeof(struct sockaddr_in)) == 0) {
+            pthread_mutex_unlock(&lock);
+            return i;
+        }
+    }
+    pthread_mutex_unlock(&lock);
+    return -1;
+}
+
+// Atualiza as informações do cliente
+void update_client_info(int client_index, int seq_num, int value) {
+    pthread_mutex_lock(&lock);
+    client_info_array[client_index].last_seq_num = seq_num;
+    client_info_array[client_index].partial_sum += value;
+    pthread_mutex_unlock(&lock);
 }
