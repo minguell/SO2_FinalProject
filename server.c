@@ -92,6 +92,7 @@ void* discovery_handler(void *arg) {
     socklen_t client_len = sizeof(client_addr);
     char buffer[BUFFER_SIZE];
 
+    printf("ENTROU DISCOVERY HANDLER 1\n");
     // Cria o socket UDP para descoberta
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("[server] Error creating discovery socket");
@@ -104,6 +105,7 @@ void* discovery_handler(void *arg) {
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
     server_addr.sin_port = htons(DISCOVERY_PORT);
 
+    printf("ENTROU DISCOVERY HANDLER 2\n");
     // Faz o bind do socket
     if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("[server] Error binding discovery socket");
@@ -113,17 +115,21 @@ void* discovery_handler(void *arg) {
     printf("[server] Discovery service listening on port %d...\n", DISCOVERY_PORT);
 
     while (1) {
+        
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        
         if (n < 0) {
             perror("[server] Error receiving discovery message");
             continue;
         }
-
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
+        printf("descoberta %d \n",msg.type);
 
         if (msg.type == 0) { // Mensagem de descoberta
+            printf("A DESCOBERTA FOI FEITA!! \n");
             handle_discovery(sockfd, &client_addr, client_len);
+            
         }
     }
 
@@ -160,6 +166,7 @@ void* listen_handler(void *arg) {
 
     while (1) {
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+
         if (n < 0) {
             perror("[server] Error receiving client message");
             continue;
@@ -167,6 +174,8 @@ void* listen_handler(void *arg) {
 
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
+
+        printf("requisicao %d \n",msg.type);
 
         if (msg.type == 1) { // Mensagem de requisição
             // Aloca memória para os dados da thread
@@ -191,6 +200,7 @@ void* listen_handler(void *arg) {
             }
         } else {
             printf("[server] Unknown message type received.\n");
+
         }
     }
 
