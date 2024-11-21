@@ -26,13 +26,18 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
 void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void* read_input(void *arg);
 
-int main() {
+int main(int argc, char *argv[]) {
     int sockfd;
     struct sockaddr_in server_addr;
     char buffer[BUFFER_SIZE];
     int number;
     int seq_num = 0;
-    pthread_t input_thread;
+
+    // Portas padrão ou fornecidas via argumentos
+    int server_port = (argc > 1) ? atoi(argv[1]) : SERVER_PORT;
+    int discovery_port = (argc > 2) ? atoi(argv[2]) : DISCOVERY_PORT;
+
+    printf("[client] Using server port: %d, discovery port: %d\n", server_port, discovery_port);
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -43,19 +48,13 @@ int main() {
     // Configura o endereço do servidor
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_port = htons(server_port);
 
     // Envia mensagem de descoberta
     send_discovery_message(sockfd, &server_addr);
 
     // Processa a resposta do servidor
     process_server_response(sockfd, &server_addr);
-
-    // Cria uma thread para leitura de entrada
-    if (pthread_create(&input_thread, NULL, read_input, (void *)&sockfd) != 0) {
-        perror("[client] Error creating input thread");
-        exit(EXIT_FAILURE);
-    }
 
     // Loop para enviar números ao servidor
     while (1) {
@@ -71,32 +70,25 @@ int main() {
 }
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
-    struct sockaddr_in broadcast_addr;
     struct message msg;
     msg.type = 0; // Discovery type
     msg.seq_num = 0;
     msg.value = 0;
-    int broadcast = 1;
 
-    // Configura o endereço de broadcast
-    memset(&broadcast_addr, 0, sizeof(broadcast_addr));
-    broadcast_addr.sin_family = AF_INET;
-    broadcast_addr.sin_port = htons(DISCOVERY_PORT);
-    broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    // Configura o endereço do servidor
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(SERVER_PORT); // Porta do servidor
+    server_addr->sin_addr.s_addr = inet_addr("IP_DO_SERVIDOR"); // Substitua "IP_DO_SERVIDOR" pelo endereço IP real do servidor
 
-    // Habilita o modo de broadcast
-    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) < 0) {
-        perror("[client] Error setting broadcast option");
-        exit(EXIT_FAILURE);
-    }
+    printf("[client] Sending discovery message to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
 
     // Envia a mensagem de descoberta
-    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
         perror("[client] Error sending discovery message");
         exit(EXIT_FAILURE);
     }
-
-    printf("[client] Discovery message sent\n");
+    printf("[client] Discovery message sent to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
 }
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
@@ -109,7 +101,7 @@ void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
         exit(EXIT_FAILURE);
     }
 
-    printf("[client] Server response received. Server address: %s:%d\n", inet_ntoa(server_addr->sin_addr), ntohs(server_addr->sin_port));
+    printf("[client] Server response received. Type: %d, Seq_num: %d, Value: %d\n", msg.type, msg.seq_num, msg.value);
 }
 
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num) {
@@ -170,6 +162,7 @@ void* read_input(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_addr.s_addr = inet_addr("IP_DO_SERVIDOR"); // Substitua "IP_DO_SERVIDOR" pelo endereço IP real do servidor
 
     while (1) {
         printf("[client] Enter a number to send to the server: ");
