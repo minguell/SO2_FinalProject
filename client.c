@@ -20,24 +20,18 @@ struct message {
     int value;
 };
 
-void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
+void send_discovery_message(int sockfd);
 void process_server_response(int sockfd, struct sockaddr_in *server_addr);
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
-void* read_input(void *arg);
+void* send_numbers(void *arg);
+void* display_status(void *arg);
 
 int main(int argc, char *argv[]) {
     int sockfd;
-    struct sockaddr_in server_addr;
-    char buffer[BUFFER_SIZE];
-    int number;
-    int seq_num = 0;
+    pthread_t send_thread, status_thread;
 
-    // Portas padrão ou fornecidas via argumentos
-    int server_port = (argc > 1) ? atoi(argv[1]) : SERVER_PORT;
-    int discovery_port = (argc > 2) ? atoi(argv[2]) : DISCOVERY_PORT;
-
-    printf("[client] Using server port: %d, discovery port: %d\n", server_port, discovery_port);
+    printf("[client] Using discovery port: %d\n", DISCOVERY_PORT);
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -45,49 +39,63 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Configura o endereço do servidor
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(server_port);
+    // Configura o socket para permitir broadcast
+    int broadcastEnable = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) < 0) {
+        perror("[client] Could not enable broadcast on socket");
+        exit(EXIT_FAILURE);
+    }
 
     // Envia mensagem de descoberta
-    send_discovery_message(sockfd, &server_addr);
+    send_discovery_message(sockfd);
 
     // Processa a resposta do servidor
+    struct sockaddr_in server_addr;
     process_server_response(sockfd, &server_addr);
 
-    // Loop para enviar números ao servidor
-    while (1) {
-        if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
-            number = atoi(buffer);
-            send_number(sockfd, &server_addr, number, seq_num++);
-        }
+    // Cria uma thread para enviar números automaticamente
+    if (pthread_create(&send_thread, NULL, send_numbers, (void *)&sockfd) != 0) {
+        perror("[client] Error creating send thread");
+        exit(EXIT_FAILURE);
     }
+
+    // Cria uma thread para exibir mensagens de status
+    if (pthread_create(&status_thread, NULL, display_status, (void *)&sockfd) != 0) {
+        perror("[client] Error creating status thread");
+        exit(EXIT_FAILURE);
+    }
+
+    // Aguarda as threads terminarem (nunca terminam neste caso)
+    pthread_join(send_thread, NULL);
+    pthread_join(status_thread, NULL);
 
     close(sockfd);
     return 0;
 }
 
-void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
+void send_discovery_message(int sockfd) {
     struct message msg;
+    struct sockaddr_in broadcast_addr;
+
     msg.type = 0; // Discovery type
     msg.seq_num = 0;
     msg.value = 0;
 
-    // Configura o endereço do servidor
-    memset(server_addr, 0, sizeof(*server_addr));
-    server_addr->sin_family = AF_INET;
-    server_addr->sin_port = htons(SERVER_PORT); // Porta do servidor
-    server_addr->sin_addr.s_addr = inet_addr("IP_DO_SERVIDOR"); // Substitua "IP_DO_SERVIDOR" pelo endereço IP real do servidor
+    // Configura o endereço de broadcast
+    memset(&broadcast_addr, 0, sizeof(broadcast_addr));
+    broadcast_addr.sin_family = AF_INET;
+    broadcast_addr.sin_port = htons(DISCOVERY_PORT); // Porta de descoberta
+    broadcast_addr.sin_addr.s_addr = inet_addr("255.255.255.255"); // Endereço de broadcast
 
-    printf("[client] Sending discovery message to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
+    printf("[client] Sending discovery message to broadcast address %s:%d\n",
+           inet_ntoa(broadcast_addr.sin_addr), DISCOVERY_PORT);
 
     // Envia a mensagem de descoberta
-    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
         perror("[client] Error sending discovery message");
         exit(EXIT_FAILURE);
     }
-    printf("[client] Discovery message sent to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
+    printf("[client] Discovery message sent.\n");
 }
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
@@ -100,7 +108,8 @@ void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
         exit(EXIT_FAILURE);
     }
 
-    printf("[client] Server response received. Type: %d, Seq_num: %d, Value: %d\n", msg.type, msg.seq_num, msg.value);
+    printf("[client] Server response received. Type: %d, Seq_num: %d, Value: %d\n",
+           msg.type, msg.seq_num, msg.value);
 }
 
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num) {
@@ -150,23 +159,46 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     }
 }
 
-void* read_input(void *arg) {
+void* send_numbers(void *arg) {
     int sockfd = *(int *)arg;
-    char buffer[BUFFER_SIZE];
-    int number;
-    int seq_num = 0;
     struct sockaddr_in server_addr;
+    int number;
+    int seq_num = 1; // Começa em 1, como especificado no enunciado
 
     // Configura o endereço do servidor
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr("IP_DO_SERVIDOR"); // Substitua "IP_DO_SERVIDOR" pelo endereço IP real do servidor
+    server_addr.sin_addr.s_addr = inet_addr("255.255.255.255"); // Broadcast address
 
     while (1) {
-        if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
-            number = atoi(buffer);
-            send_number(sockfd, &server_addr, number, seq_num++);
+        if (scanf("%d", &number) != 1) {
+            fprintf(stderr, "[client] Entrada inválida. Por favor, digite um número inteiro.\n");
+            // Limpa o buffer caso a entrada não seja válida
+            while (getchar() != '\n');
+            continue;
+        }
+
+        // Envia o número ao servidor
+        send_number(sockfd, &server_addr, number, seq_num);
+        seq_num++; // Incrementa o identificador da requisição
+    }
+
+    return NULL;
+}
+
+void* display_status(void *arg) {
+    int sockfd = *(int *)arg;
+    struct message msg;
+    struct sockaddr_in server_addr;
+    socklen_t addr_len = sizeof(server_addr);
+
+    while (1) {
+        // Aguarda a confirmação (ACK) do servidor
+        if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&server_addr, &addr_len) < 0) {
+            perror("[client] Error receiving status message");
+        } else {
+            printf("[client] Server ACK: Total sum = %d\n", msg.value);
         }
     }
 
