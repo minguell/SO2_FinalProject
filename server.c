@@ -8,8 +8,6 @@
 #include <time.h>
 #include <errno.h>
 
-#define LISTEN_PORT 4000
-#define DISCOVERY_PORT 4001
 #define BUFFER_SIZE 1024
 #define NUM_MAX_CLIENT 10
 

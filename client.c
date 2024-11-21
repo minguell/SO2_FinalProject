@@ -10,8 +10,6 @@
 #include <time.h>
 
 #define BUFFER_SIZE 1024
-#define SERVER_PORT 4000
-#define DISCOVERY_PORT 4001
 #define TIMEOUT 5
 
 struct message {
