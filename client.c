@@ -20,7 +20,7 @@ struct message {
     int value;
 };
 
-void send_discovery_message(int sockfd);
+void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
 void process_server_response(int sockfd, struct sockaddr_in *server_addr);
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
@@ -47,10 +47,10 @@ int main(int argc, char *argv[]) {
     }
 
     // Envia mensagem de descoberta
-    send_discovery_message(sockfd);
+    struct sockaddr_in server_addr;
+    send_discovery_message(sockfd, &server_addr);
 
     // Processa a resposta do servidor
-    struct sockaddr_in server_addr;
     process_server_response(sockfd, &server_addr);
 
     // Cria uma thread para enviar números automaticamente
@@ -73,29 +73,26 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void send_discovery_message(int sockfd) {
+void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
-    struct sockaddr_in broadcast_addr;
-
     msg.type = 0; // Discovery type
     msg.seq_num = 0;
     msg.value = 0;
 
-    // Configura o endereço de broadcast
-    memset(&broadcast_addr, 0, sizeof(broadcast_addr));
-    broadcast_addr.sin_family = AF_INET;
-    broadcast_addr.sin_port = htons(DISCOVERY_PORT); // Porta de descoberta
-    broadcast_addr.sin_addr.s_addr = inet_addr("255.255.255.255"); // Endereço de broadcast
+    // Configura o endereço do servidor
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(SERVER_PORT); // Porta do servidor
+    server_addr->sin_addr.s_addr = inet_addr("143.54.49.184"); // Substitua "143.54.49.184" pelo endereço IP real do servidor
 
-    printf("[client] Sending discovery message to broadcast address %s:%d\n",
-           inet_ntoa(broadcast_addr.sin_addr), DISCOVERY_PORT);
+    printf("[client] Sending discovery message to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
 
     // Envia a mensagem de descoberta
-    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
         perror("[client] Error sending discovery message");
         exit(EXIT_FAILURE);
     }
-    printf("[client] Discovery message sent.\n");
+    printf("[client] Discovery message sent to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
 }
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
@@ -169,7 +166,7 @@ void* send_numbers(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr("255.255.255.255"); // Broadcast address
+    server_addr.sin_addr.s_addr = inet_addr("143.54.49.184"); // Substitua "143.54.49.184" pelo endereço IP real do servidor
 
     while (1) {
         if (scanf("%d", &number) != 1) {

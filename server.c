@@ -54,6 +54,8 @@ void update_client_info(int client_index, int seq_num, int value);
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len);
 void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
+void* process_request_thread(void* arg);
+void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum);
 
 int main(int argc, char *argv[]) {
     pthread_t discovery_thread, listen_thread;
@@ -324,6 +326,16 @@ void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int 
     printf("Soma Acumulada: %d\n", total_sum);
 }
 
+void init_client_info() {
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+        client_info_array[i].is_active = 0;
+        client_info_array[i].last_seq_num = -1;
+        client_info_array[i].partial_sum = 0;
+    }
+    pthread_mutex_unlock(&lock);
+}
+
 void* process_request_thread(void* arg) {
     struct request_thread_data* data = (struct request_thread_data*)arg;
 
@@ -343,16 +355,17 @@ void* process_request_thread(void* arg) {
         }
         pthread_mutex_unlock(&lock);
     } else {
-        if (msg->seq_num <= client_info_array[client_index].last_seq_num) {
+        if (data->msg.seq_num <= client_info_array[client_index].last_seq_num) {
             printf("[server] DUP!! Cliente %s id_req %d value %d num_reqs %d total_sum %d\n",
-                   inet_ntoa(client_addr->sin_addr),
-                   msg->seq_num, msg->value,
+                   inet_ntoa(data->client_addr.sin_addr),
+                   data->msg.seq_num, data->msg.value,
                    num_reqs, total_sum);
-            send_ack(sockfd, client_addr, client_len, total_sum);
-            return;
+            send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum);
+            free(data); // Libera a memória alocada
+            pthread_exit(NULL);
         }
         
-        update_client_info(client_index, msg->seq_num, msg->value);
+        update_client_info(client_index, data->msg.seq_num, data->msg.value);
     }
 
     write_total_sum(data->msg.value);
