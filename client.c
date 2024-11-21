@@ -75,14 +75,14 @@ int main(int argc, char *argv[]) {
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
-    msg.type = 1; // Discovery type
+    msg.type = 0; // Discovery type
     msg.seq_num = 0;
     msg.value = 0;
 
     // Configura o endereço do servidor
     memset(server_addr, 0, sizeof(*server_addr));
     server_addr->sin_family = AF_INET;
-    server_addr->sin_port = htons(SERVER_PORT); // Porta do servidor
+    server_addr->sin_port = htons(DISCOVERY_PORT); // Porta do servidor
     server_addr->sin_addr.s_addr = inet_addr("143.54.55.44"); //pelo endereço IP real do servidor
 
     printf("[client] Sending discovery message to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
@@ -150,6 +150,7 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     } else {
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
             perror("[client] Error receiving ACK");
+            number = NULL;
         } else {
             printf("[client] Server ACK: Total sum = %d\n", msg.value);
         }
