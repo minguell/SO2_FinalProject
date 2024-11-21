@@ -70,34 +70,29 @@ int main(int argc, char *argv[]) {
 }
 
 
+// Altere a função send_discovery_message para enviar para a porta 4000
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
-    struct sockaddr_in broadcast_addr;
     struct message msg;
     msg.type = 0; // Discovery type
     msg.seq_num = 0;
     msg.value = 0;
-    int broadcast = 1;
 
     // Configura o endereço de broadcast
-    memset(&broadcast_addr, 0, sizeof(broadcast_addr));
-    broadcast_addr.sin_family = AF_INET;
-    broadcast_addr.sin_port = htons(DISCOVERY_PORT);
-    broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(SERVER_PORT); // Alteração para a porta 4000
+    server_addr->sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    // Habilita o modo de broadcast
-    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) < 0) {
-        perror("[client] Error setting broadcast option");
-        exit(EXIT_FAILURE);
-    }
+    printf("[client] Sending discovery message to 127.0.0.1:%d\n", SERVER_PORT);
 
     // Envia a mensagem de descoberta
-    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr)) < 0) {
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
         perror("[client] Error sending discovery message");
         exit(EXIT_FAILURE);
     }
-
-    printf("[client] Discovery message sent\n");
+    printf("[client] Discovery message sent to 127.0.0.1:%d\n", SERVER_PORT);
 }
+
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
@@ -109,9 +104,8 @@ void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
         exit(EXIT_FAILURE);
     }
 
-    printf("[client] Server response received. Server address: %s:%d\n", inet_ntoa(server_addr->sin_addr), ntohs(server_addr->sin_port));
+    printf("[client] Server response received. Type: %d, Seq_num: %d, Value: %d\n", msg.type, msg.seq_num, msg.value);
 }
-
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num) {
     struct message msg;
     msg.type = 1; // Request type

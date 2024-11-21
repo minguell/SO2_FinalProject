@@ -64,17 +64,20 @@ int main(int argc, char *argv[]) {
 
     // Cria o socket UDP
     if ((server_sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("[server] Could not create socket");
+        perror("[server] Error creating socket");
         exit(EXIT_FAILURE);
     }
     printf("[server] Socket created.\n");
 
+    // Configura o endereço do servidor
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
     server_addr.sin_port = htons(listen_port);
 
+    // Faz o bind do socket
     if (bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("[server] Bind failed");
+        perror("[server] Error binding socket");
         exit(EXIT_FAILURE);
     }
     printf("[server] Bind done.\n");
@@ -91,13 +94,20 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        // Processa a mensagem...
+        struct message msg;
+        memcpy(&msg, buffer, sizeof(msg));
+
+        printf("[server] Message received: Type=%d, Seq_num=%d, Value=%d\n", msg.type, msg.seq_num, msg.value);
+
+        if (msg.type == 0) {
+            handle_discovery(server_sockfd, &client_addr, client_len);
+        } else if (msg.type == 1) {
+            process_request(&msg, &client_addr, client_len, server_sockfd);
+        } else {
+            printf("[server] Unknown message type received.\n");
+        }
     }
-
-    close(server_sockfd);
-    return 0;
 }
-
 
 // Inicializa as informações dos clientes
 void init_client_info() {
@@ -130,7 +140,6 @@ void* client_handler(void *arg) {
         free(client_data);
         pthread_exit(NULL);
     }
-
     struct message msg;
     memcpy(&msg, buffer, sizeof(msg));
 
@@ -229,14 +238,19 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
     response.seq_num = 0;
     response.value = 0;
 
-    sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)client_addr, client_len);
+    // Envia a resposta para a porta 4000 onde o cliente está esperando
+    if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)client_addr, client_len) < 0) {
+        perror("[server] Error sending discovery response");
+    } else {
+        printf("[server] Discovery response sent to %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+    }
 }
 
 // Função para leitura do total_sum e num_reqs
-void read_total_sum(int *num_reqs, int *total_sum) {
+void read_total_sum(int *num_reqs_ptr, int *total_sum_ptr) {
     pthread_mutex_lock(&lock);
-    *num_reqs = num_reqs;
-    *total_sum = total_sum;
+    *num_reqs_ptr = num_reqs;
+    *total_sum_ptr = total_sum;
     pthread_mutex_unlock(&lock);
 }
 
