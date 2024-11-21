@@ -25,11 +25,11 @@ void process_server_response(int sockfd, struct sockaddr_in *server_addr);
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
 void* send_numbers(void *arg);
-void* display_status(void *arg);
 
 int main(int argc, char *argv[]) {
     int sockfd;
-    pthread_t send_thread, status_thread;
+    pthread_t send_thread;
+    int port = atoi(argv[1]);
 
     printf("[client] Using discovery port: %d\n", DISCOVERY_PORT);
 
@@ -59,15 +59,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Cria uma thread para exibir mensagens de status
-    if (pthread_create(&status_thread, NULL, display_status, (void *)&sockfd) != 0) {
-        perror("[client] Error creating status thread");
-        exit(EXIT_FAILURE);
-    }
-
-    // Aguarda as threads terminarem (nunca terminam neste caso)
+    // Aguarda a thread terminar (nunca termina neste caso)
     pthread_join(send_thread, NULL);
-    pthread_join(status_thread, NULL);
 
     close(sockfd);
     return 0;
@@ -75,24 +68,24 @@ int main(int argc, char *argv[]) {
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
-    msg.type = 0; // Discovery type
+    msg.type = 0; // Tipo de mensagem de descoberta
     msg.seq_num = 0;
     msg.value = 0;
 
-    // Configura o endereço do servidor
+    // Configura o endereço de broadcast
     memset(server_addr, 0, sizeof(*server_addr));
     server_addr->sin_family = AF_INET;
-    server_addr->sin_port = htons(DISCOVERY_PORT); // Porta do servidor
-    server_addr->sin_addr.s_addr = inet_addr("143.54.55.44"); //pelo endereço IP real do servidor
+    server_addr->sin_port = htons(DISCOVERY_PORT); // Porta de descoberta
+    server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
 
-    printf("[client] Sending discovery message to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
+    printf("[client] Enviando mensagem de descoberta para todos na rede...\n");
 
-    // Envia a mensagem de descoberta
+    // Envia a mensagem de descoberta via broadcast
     if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
-        perror("[client] Error sending discovery message");
+        perror("[client] Erro ao enviar mensagem de descoberta");
         exit(EXIT_FAILURE);
     }
-    printf("[client] Discovery message sent to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
+    printf("[client] Mensagem de descoberta enviada...\n");
 }
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
@@ -122,7 +115,7 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
     }
 
     printf("[client] Sent number: %d with sequence number: %d\n", number, seq_num);
-
+    
     // Configura o timeout para receber a confirmação (ACK)
     handle_timeout(sockfd, server_addr, number, seq_num);
 }
@@ -139,7 +132,6 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
 
     FD_ZERO(&readfds);
     FD_SET(sockfd, &readfds);
-
     // Aguarda a confirmação (ACK) do servidor
     int retval = select(sockfd + 1, &readfds, NULL, NULL, &tv);
     if (retval == -1) {
@@ -150,7 +142,6 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     } else {
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
             perror("[client] Error receiving ACK");
-            number = NULL;
         } else {
             printf("[client] Server ACK: Total sum = %d\n", msg.value);
         }
@@ -167,38 +158,19 @@ void* send_numbers(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr("143.54.55.44"); // Substitua "143.54.49.184" pelo endereço IP real do servidor
+    server_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST); // Substitua "143.54.49.184" pelo endereço IP real do servidor
 
-    while (1) {
+     while (1) {
         if (scanf("%d", &number) != 1) {
             fprintf(stderr, "[client] Entrada inválida. Por favor, digite um número inteiro.\n");
             // Limpa o buffer caso a entrada não seja válida
             while (getchar() != '\n');
             continue;
         }
-
         // Envia o número ao servidor
         send_number(sockfd, &server_addr, number, seq_num);
         seq_num++; // Incrementa o identificador da requisição
     }
-
-    return NULL;
-}
-
-void* display_status(void *arg) {
-    int sockfd = *(int *)arg;
-    struct message msg;
-    struct sockaddr_in server_addr;
-    socklen_t addr_len = sizeof(server_addr);
-
-    while (1) {
-        // Aguarda a confirmação (ACK) do servidor
-        if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&server_addr, &addr_len) < 0) {
-            perror("[client] Error receiving status message");
-        } else {
-            printf("[client] Server ACK: Total sum = %d\n", msg.value);
-        }
-    }
-
+	
     return NULL;
 }
