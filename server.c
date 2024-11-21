@@ -46,6 +46,7 @@ void update_client_info(int client_index, int seq_num, int value);
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len);
 void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
+void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum);
 
 int main(int argc, char *argv[]) {
     int server_sockfd;
@@ -181,7 +182,8 @@ void process_request(struct message *msg, struct sockaddr_in *client_addr, sockl
 
     write_total_sum(msg->value);
 
-    printf("[server] Received number: %d, Total sum: %d, Number of requests: %d\n", msg->value, total_sum, num_reqs);
+    // Exibe detalhes da requisição
+    exibirDetalhesRequisicao(client_addr, msg->seq_num, num_reqs, total_sum);
 
     // Envia a confirmação (ACK) ao cliente
     send_ack(sockfd, client_addr, client_len, total_sum);
@@ -260,4 +262,20 @@ void write_total_sum(int value) {
     total_sum += value;
     num_reqs++;
     pthread_mutex_unlock(&lock);
+}
+
+// Exibe detalhes da requisição
+void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum) {
+    time_t t = time(NULL);
+    struct tm *now = localtime(&t);
+    char ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(client_addr->sin_addr), ip, INET_ADDRSTRLEN);
+
+    printf("Requisição Recebida:\n");
+    printf("Data: %d-%02d-%02d\n", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
+    printf("Hora: %02d:%02d:%02d\n", now->tm_hour, now->tm_min, now->tm_sec);
+    printf("Endereço IP: %s\n", ip);
+    printf("Número da Requisição: %d\n", seq_num);
+    printf("Número Total de Requisições: %d\n", num_reqs);
+    printf("Soma Acumulada: %d\n", total_sum);
 }
