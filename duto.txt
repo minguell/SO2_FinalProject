@@ -1,0 +1,15 @@
+void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len) {
+    printf("[server] Discovery message received from %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+
+    struct message response;
+    response.type = 0; // Discovery response type
+    response.seq_num = 0;
+    response.value = 0;
+
+    // Envia a resposta para a porta 4000 onde o cliente está esperando
+    if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)client_addr, client_len) < 0) {
+        perror("[server] Error sending discovery response");
+    } else {
+        printf("[server] Discovery response sent to %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+    }
+}
