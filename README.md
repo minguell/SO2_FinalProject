@@ -1,3 +1,53 @@
+# Trabalho Prático - Sistemas Operacionais II (Parte 1)
+
+Este projeto implementa um serviço distribuído para soma de números inteiros, utilizando **threads**, **sincronização** e **comunicação via UDP**. É a primeira parte do trabalho prático da disciplina **INF01151 - Sistemas Operacionais II** no semestre 2024/2.
+
+## Descrição
+
+O sistema é composto por dois programas:
+- **Servidor (`server.c`)**: Recebe requisições de múltiplos clientes, soma os valores enviados a uma variável acumuladora, e retorna o resultado parcial ao cliente correspondente.
+- **Cliente (`client.c`)**: Envia números inteiros ao servidor e exibe as respostas.
+
+### Funcionalidades
+1. **Descoberta**: O cliente utiliza mensagens de broadcast para localizar o servidor.
+2. **Processamento**: 
+   - O servidor processa cada requisição de forma concorrente, utilizando uma thread por requisição.
+   - A soma é mantida de forma consistente com controle de exclusão mútua.
+3. **Interface**:
+   - Exibição de mensagens no cliente e servidor com informações sobre requisições e respostas.
+
+### Estruturas de Dados
+#### Tabelas no Servidor:
+- **Tabela de Clientes**:
+  - Endereço IP.
+  - Última requisição processada.
+  - Soma acumulada para o cliente.
+- **Tabela de Soma Agregada**:
+  - Total de requisições recebidas.
+  - Soma acumulada global.
+
+#### Formato de Mensagens
+Estruturas de dados utilizadas para comunicação (definidas em C):
+```c
+struct requisicao {
+    uint16_t value;     // Valor da requisição
+};
+
+struct requisicao_ack {
+    uint16_t seqn;      // Número de sequência do ack
+    uint16_t num_reqs;  // Quantidade de requisições processadas
+    uint16_t total_sum; // Soma acumulada
+};
+
+typedef struct __packet {
+    uint16_t type;      // Tipo do pacote (DESC, REQ, DESC_ACK, REQ_ACK)
+    uint16_t seqn;      // Número de sequência da requisição
+    union {
+        struct requisicao req;
+        struct requisicao_ack ack;
+    };
+} packet;
+```
 Compilação e Execução
 Requisitos
 Sistema Operacional: Linux
