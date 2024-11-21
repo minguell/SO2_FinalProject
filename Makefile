@@ -2,7 +2,7 @@
 # Grupo: Bruno Alexandre - 00550177, Miguel Dutra - 00342573 e Nathan Mattes - 00342941
 
 CC=gcc
-CFLAGS=-I.
+CFLAGS=-I. -lpthread
 OBJ = server.o client.o
 CLN = server client
 
