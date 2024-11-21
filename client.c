@@ -58,7 +58,6 @@ int main(int argc, char *argv[]) {
 
     // Loop para enviar números ao servidor
     while (1) {
-        printf("[client] Enter a number to send to the server: ");
         if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
             number = atoi(buffer);
             send_number(sockfd, &server_addr, number, seq_num++);
@@ -165,7 +164,6 @@ void* read_input(void *arg) {
     server_addr.sin_addr.s_addr = inet_addr("IP_DO_SERVIDOR"); // Substitua "IP_DO_SERVIDOR" pelo endereço IP real do servidor
 
     while (1) {
-        printf("[client] Enter a number to send to the server: ");
         if (fgets(buffer, BUFFER_SIZE, stdin) != NULL) {
             number = atoi(buffer);
             send_number(sockfd, &server_addr, number, seq_num++);
