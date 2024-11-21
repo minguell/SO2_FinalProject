@@ -41,6 +41,8 @@ struct client_info client_info_array[NUM_MAX_CLIENT];
 pthread_mutex_t lock;
 int total_sum = 0;
 int num_reqs = 0;
+int listen_port = 0;
+int disco_port = 0;
 
 // Prototipação das funções
 void init_client_info();
@@ -59,7 +61,8 @@ void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int 
 
 int main(int argc, char *argv[]) {
     pthread_t discovery_thread, listen_thread;
-
+    listen_port = atoi(argv[1]);
+    disco_port = listen_port + 1;
     // Inicializa as informações dos clientes
     init_client_info();
 
@@ -92,7 +95,7 @@ void* discovery_handler(void *arg) {
     socklen_t client_len = sizeof(client_addr);
     char buffer[BUFFER_SIZE];
 
-    printf("ENTROU DISCOVERY HANDLER 1\n");
+
     // Cria o socket UDP para descoberta
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("[server] Error creating discovery socket");
@@ -103,16 +106,16 @@ void* discovery_handler(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
-    server_addr.sin_port = htons(DISCOVERY_PORT);
+    server_addr.sin_port = htons(disco_port);
 
-    printf("ENTROU DISCOVERY HANDLER 2\n");
+
     // Faz o bind do socket
     if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         perror("[server] Error binding discovery socket");
         close(sockfd);
         pthread_exit(NULL);
     }
-    printf("[server] Discovery service listening on port %d...\n", DISCOVERY_PORT);
+    printf("[server] Discovery service listening on port %d...\n", disco_port);
 
     while (1) {
         
@@ -124,10 +127,8 @@ void* discovery_handler(void *arg) {
         }
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
-        printf("descoberta %d \n",msg.type);
 
         if (msg.type == 0) { // Mensagem de descoberta
-            printf("A DESCOBERTA FOI FEITA!! \n");
             handle_discovery(sockfd, &client_addr, client_len);
             
         }
@@ -154,7 +155,7 @@ void* listen_handler(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
-    server_addr.sin_port = htons(LISTEN_PORT);
+    server_addr.sin_port = htons(listen_port);
 
     // Faz o bind do socket
     if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -162,7 +163,7 @@ void* listen_handler(void *arg) {
         close(sockfd);
         pthread_exit(NULL);
     }
-    printf("[server] Listening for client requests on port %d...\n", LISTEN_PORT);
+    printf("[server] Listening for client requests on port %d...\n", listen_port);
 
     while (1) {
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
@@ -175,7 +176,6 @@ void* listen_handler(void *arg) {
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
 
-        printf("requisicao %d \n",msg.type);
 
         if (msg.type == 1) { // Mensagem de requisição
             // Aloca memória para os dados da thread
@@ -289,18 +289,18 @@ void update_client_info(int client_index, int seq_num, int value) {
 
 // Lida com a mensagem de descoberta
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len) {
-    printf("[server] Discovery message received from %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+    printf("[server] Mensagem de descoberta recebida de %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
 
     struct message response;
-    response.type = 0; // Discovery response type
+    response.type = 1; // Resposta ao cliente
     response.seq_num = 0;
     response.value = 0;
 
-    // Envia a resposta para a porta 4000 onde o cliente está esperando
+    // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)client_addr, client_len) < 0) {
-        perror("[server] Error sending discovery response");
+        perror("[server] Erro ao enviar resposta de descoberta");
     } else {
-        printf("[server] Discovery response sent to %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
+        printf("[server] Resposta de descoberta enviada para %s:%d\n", inet_ntoa(client_addr->sin_addr), ntohs(client_addr->sin_port));
     }
 }
 
