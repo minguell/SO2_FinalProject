@@ -29,6 +29,13 @@ struct message {
     int value;
 };
 
+struct request_thread_data {
+    struct message msg;
+    struct sockaddr_in client_addr;
+    socklen_t client_len;
+    int sockfd;
+};
+
 // Variáveis globais
 struct client_info client_info_array[NUM_MAX_CLIENT];
 pthread_mutex_t lock;
@@ -37,7 +44,8 @@ int num_reqs = 0;
 
 // Prototipação das funções
 void init_client_info();
-void* client_handler(void *arg);
+void* discovery_handler(void *arg);
+void* listen_handler(void *arg);
 void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
 void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum);
 void exibirStatusInicial(int num_reqs, int total_sum);
@@ -46,110 +54,157 @@ void update_client_info(int client_index, int seq_num, int value);
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len);
 void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
+void* process_request_thread(void* arg);
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum);
 
-
 int main(int argc, char *argv[]) {
-    int server_sockfd;
-    struct sockaddr_in server_addr, client_addr;
-    pthread_t threads[NUM_MAX_CLIENT];
-    char buffer[BUFFER_SIZE];
-    socklen_t client_len = sizeof(client_addr);
-
-    // Porta padrão ou fornecida via argumento
-    int listen_port = (argc > 1) ? atoi(argv[1]) : LISTEN_PORT;
-
-    printf("[server] Using port: %d\n", listen_port);
+    pthread_t discovery_thread, listen_thread;
 
     // Inicializa as informações dos clientes
     init_client_info();
 
-    // Cria o socket UDP
-    if ((server_sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("[server] Error creating socket");
-        exit(EXIT_FAILURE);
-    }
-    printf("[server] Socket created.\n");
-
-    // Configura o endereço do servidor
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    server_addr.sin_port = htons(listen_port);
-
-    // Faz o bind do socket
-    if (bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("[server] Error binding socket");
-        exit(EXIT_FAILURE);
-    }
-    printf("[server] Bind done.\n");
-
     // Exibe o status inicial
     exibirStatusInicial(num_reqs, total_sum);
 
-    printf("[server] Listening for clients...\n");
+    // Cria uma thread para escutar mensagens de descoberta
+    if (pthread_create(&discovery_thread, NULL, discovery_handler, NULL) != 0) {
+        perror("[server] Error creating discovery thread");
+        exit(EXIT_FAILURE);
+    }
+
+    // Cria uma thread para escutar requisições dos clientes
+    if (pthread_create(&listen_thread, NULL, listen_handler, NULL) != 0) {
+        perror("[server] Error creating listen thread");
+        exit(EXIT_FAILURE);
+    }
+
+    // Aguarda as threads terminarem (nunca terminam neste caso)
+    pthread_join(discovery_thread, NULL);
+    pthread_join(listen_thread, NULL);
+
+    return 0;
+}
+
+// Thread para lidar com mensagens de descoberta
+void* discovery_handler(void *arg) {
+    int sockfd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+
+    printf("ENTROU DISCOVERY HANDLER 1\n");
+    // Cria o socket UDP para descoberta
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("[server] Error creating discovery socket");
+        pthread_exit(NULL);
+    }
+
+    // Configura o endereço do servidor para descoberta
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
+    server_addr.sin_port = htons(DISCOVERY_PORT);
+
+    printf("ENTROU DISCOVERY HANDLER 2\n");
+    // Faz o bind do socket
+    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("[server] Error binding discovery socket");
+        close(sockfd);
+        pthread_exit(NULL);
+    }
+    printf("[server] Discovery service listening on port %d...\n", DISCOVERY_PORT);
 
     while (1) {
-        int n = recvfrom(server_sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        
+        int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        
         if (n < 0) {
-            perror("[server] Error receiving data");
+            perror("[server] Error receiving discovery message");
+            continue;
+        }
+        struct message msg;
+        memcpy(&msg, buffer, sizeof(msg));
+        printf("descoberta %d \n",msg.type);
+
+        if (msg.type == 0) { // Mensagem de descoberta
+            printf("A DESCOBERTA FOI FEITA!! \n");
+            handle_discovery(sockfd, &client_addr, client_len);
+            
+        }
+    }
+
+    close(sockfd);
+    pthread_exit(NULL);
+}
+
+// Thread para lidar com requisições de clientes
+void* listen_handler(void *arg) {
+    int sockfd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+
+    // Cria o socket UDP para comunicação padrão
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("[server] Error creating listen socket");
+        pthread_exit(NULL);
+    }
+
+    // Configura o endereço do servidor para comunicação padrão
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
+    server_addr.sin_port = htons(LISTEN_PORT);
+
+    // Faz o bind do socket
+    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("[server] Error binding listen socket");
+        close(sockfd);
+        pthread_exit(NULL);
+    }
+    printf("[server] Listening for client requests on port %d...\n", LISTEN_PORT);
+
+    while (1) {
+        int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+
+        if (n < 0) {
+            perror("[server] Error receiving client message");
             continue;
         }
 
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
 
-        printf("[server] Message received: Type=%d, Seq_num=%d, Value=%d\n", msg.type, msg.seq_num, msg.value);
+        printf("requisicao %d \n",msg.type);
 
-        if (msg.type == 0) {
-            handle_discovery(server_sockfd, &client_addr, client_len);
-        } else if (msg.type == 1) {
-            process_request(&msg, &client_addr, client_len, server_sockfd);
+        if (msg.type == 1) { // Mensagem de requisição
+            // Aloca memória para os dados da thread
+            struct request_thread_data* data = malloc(sizeof(struct request_thread_data));
+            if (!data) {
+                perror("[server] Memory allocation failed");
+                continue;
+            }
+
+            data->msg = msg;
+            data->client_addr = client_addr;
+            data->client_len = client_len;
+            data->sockfd = sockfd;
+
+            // Cria uma thread para processar a requisição
+            pthread_t thread_id;
+            if (pthread_create(&thread_id, NULL, process_request_thread, data) != 0) {
+                perror("[server] Error creating thread for request");
+                free(data); // Libera a memória em caso de falha
+            } else {
+                pthread_detach(thread_id); // Permite que a thread libere seus recursos ao finalizar
+            }
         } else {
             printf("[server] Unknown message type received.\n");
+
         }
     }
-}
-
-// Inicializa as informações dos clientes
-void init_client_info() {
-    pthread_mutex_lock(&lock);
-    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
-        client_info_array[i].is_active = 0;
-        client_info_array[i].last_seq_num = -1;
-        client_info_array[i].partial_sum = 0;
-    }
-    pthread_mutex_unlock(&lock);
-}
-
-// Função que a thread executa para cada cliente
-void* client_handler(void *arg) {
-    struct client_info *client_data = (struct client_info *)arg;
-    char buffer[BUFFER_SIZE];
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-    if (sockfd < 0) {
-        perror("[server] Could not create socket");
-        free(client_data);
-        pthread_exit(NULL);
-    }
-
-    // Recebe a mensagem do cliente
-    int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_data->client_addr, &client_data->client_len);
-    if (n < 0) {
-        perror("[server] Error receiving data");
-        close(sockfd);
-        free(client_data);
-        pthread_exit(NULL);
-    }
-    struct message msg;
-    memcpy(&msg, buffer, sizeof(msg));
-
-    // Processa a requisição
-    process_request(&msg, &client_data->client_addr, client_data->client_len, sockfd);
 
     close(sockfd);
-    free(client_data);
     pthread_exit(NULL);
 }
 
@@ -264,6 +319,7 @@ void write_total_sum(int value) {
     num_reqs++;
     pthread_mutex_unlock(&lock);
 }
+
 // Exibe detalhes da requisição
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum) {
     time_t t = time(NULL);
@@ -278,4 +334,58 @@ void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int 
     printf("Número da Requisição: %d\n", seq_num);
     printf("Número Total de Requisições: %d\n", num_reqs);
     printf("Soma Acumulada: %d\n", total_sum);
+}
+
+void init_client_info() {
+    pthread_mutex_lock(&lock);
+    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+        client_info_array[i].is_active = 0;
+        client_info_array[i].last_seq_num = -1;
+        client_info_array[i].partial_sum = 0;
+    }
+    pthread_mutex_unlock(&lock);
+}
+
+void* process_request_thread(void* arg) {
+    struct request_thread_data* data = (struct request_thread_data*)arg;
+
+    int client_index = find_client(&(data->client_addr));
+    if (client_index == -1) {
+        printf("[server] New client connected.\n");
+        pthread_mutex_lock(&lock);
+        for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+            if (!client_info_array[i].is_active) {
+                client_info_array[i].client_addr = data->client_addr;
+                client_info_array[i].client_len = data->client_len;
+                client_info_array[i].is_active = 1;
+                client_info_array[i].last_seq_num = data->msg.seq_num;
+                client_info_array[i].partial_sum = data->msg.value;
+                break;
+            }
+        }
+        pthread_mutex_unlock(&lock);
+    } else {
+        if (data->msg.seq_num <= client_info_array[client_index].last_seq_num) {
+            printf("[server] DUP!! Cliente %s id_req %d value %d num_reqs %d total_sum %d\n",
+                   inet_ntoa(data->client_addr.sin_addr),
+                   data->msg.seq_num, data->msg.value,
+                   num_reqs, total_sum);
+            send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum);
+            free(data); // Libera a memória alocada
+            pthread_exit(NULL);
+        }
+        
+        update_client_info(client_index, data->msg.seq_num, data->msg.value);
+    }
+
+    write_total_sum(data->msg.value);
+
+    // Exibe detalhes da requisição
+    exibirDetalhesRequisicao(&(data->client_addr), data->msg.seq_num, num_reqs, total_sum);
+
+    // Envia a confirmação (ACK) ao cliente
+    send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum);
+
+    free(data); // Libera a memória alocada
+    pthread_exit(NULL);
 }
