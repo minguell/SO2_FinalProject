@@ -21,6 +21,9 @@ struct message {
     int value;
 };
 
+int listen_port = 0;
+int disco_port = 0;
+
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
 void process_server_response(int sockfd, struct sockaddr_in *server_addr);
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
@@ -31,8 +34,10 @@ int main(int argc, char *argv[]) {
     int sockfd;
     pthread_t send_thread;
     int port = atoi(argv[1]);
+    listen_port = atoi(argv[1]);
+    disco_port = listen_port + 1;
 
-    printf("[client] Using discovery port: %d\n", DISCOVERY_PORT);
+    printf("[client] Using discovery port: %d\n", disco_port);
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -76,7 +81,7 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     // Configura o endereço de broadcast
     memset(server_addr, 0, sizeof(*server_addr));
     server_addr->sin_family = AF_INET;
-    server_addr->sin_port = htons(DISCOVERY_PORT); // Porta de descoberta
+    server_addr->sin_port = htons(disco_port); // Porta de descoberta
     server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
 
     printf("[client] Enviando mensagem de descoberta para todos na rede...\n");
@@ -158,7 +163,7 @@ void* send_numbers(void *arg) {
     // Configura o endereço do servidor
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(SERVER_PORT);
+    server_addr.sin_port = htons(listen_port);
     server_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST); // Substitua "143.54.49.184" pelo endereço IP real do servidor
 
      while (1) {
