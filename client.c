@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
-    msg.type = 0; // Discovery type
+    msg.type = 1; // Discovery type
     msg.seq_num = 0;
     msg.value = 0;
 
@@ -83,7 +83,7 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     memset(server_addr, 0, sizeof(*server_addr));
     server_addr->sin_family = AF_INET;
     server_addr->sin_port = htons(SERVER_PORT); // Porta do servidor
-    server_addr->sin_addr.s_addr = inet_addr("143.54.49.184"); // Substitua "143.54.49.184" pelo endereço IP real do servidor
+    server_addr->sin_addr.s_addr = inet_addr("143.54.55.44"); //pelo endereço IP real do servidor
 
     printf("[client] Sending discovery message to %s:%d\n", inet_ntoa(server_addr->sin_addr), SERVER_PORT);
 
@@ -166,7 +166,7 @@ void* send_numbers(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
-    server_addr.sin_addr.s_addr = inet_addr("143.54.49.184"); // Substitua "143.54.49.184" pelo endereço IP real do servidor
+    server_addr.sin_addr.s_addr = inet_addr("143.54.55.44"); // Substitua "143.54.49.184" pelo endereço IP real do servidor
 
     while (1) {
         if (scanf("%d", &number) != 1) {
