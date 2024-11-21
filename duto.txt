@@ -21,6 +21,8 @@ struct message {
     int value;
 };
 
+pthread_mutex_t socket_lock = PTHREAD_MUTEX_INITIALIZER;
+
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr);
 void process_server_response(int sockfd, struct sockaddr_in *server_addr);
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num);
@@ -101,10 +103,13 @@ void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
     socklen_t addr_len = sizeof(*server_addr);
 
     // Aguarda a resposta do servidor
+    pthread_mutex_lock(&socket_lock);
     if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
         perror("[client] Error receiving server response");
+        pthread_mutex_unlock(&socket_lock);
         exit(EXIT_FAILURE);
     }
+    pthread_mutex_unlock(&socket_lock);
 
     printf("[client] Server response received. Type: %d, Seq_num: %d, Value: %d\n",
            msg.type, msg.seq_num, msg.value);
@@ -117,10 +122,13 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
     msg.value = number;
 
     // Envia o número ao servidor
+    pthread_mutex_lock(&socket_lock);
     if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
         perror("[client] Error sending number");
+        pthread_mutex_unlock(&socket_lock);
         return;
     }
+    pthread_mutex_unlock(&socket_lock);
 
     printf("[client] Sent number: %d with sequence number: %d\n", number, seq_num);
 
@@ -152,16 +160,22 @@ int handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int 
             return -1;
         } else if (retval == 0) {
             printf("[client] Timeout, resending number: %d with sequence number: %d (Attempt %d/%d)\n", number, seq_num, retries + 1, MAX_RETRIES);
+            pthread_mutex_lock(&socket_lock);
             if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
                 perror("[client] Error resending number");
+                pthread_mutex_unlock(&socket_lock);
                 return -1;
             }
+            pthread_mutex_unlock(&socket_lock);
             retries++;
         } else {
+            pthread_mutex_lock(&socket_lock);
             if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
                 perror("[client] Error receiving ACK");
+                pthread_mutex_unlock(&socket_lock);
                 return -1;
             } else {
+                pthread_mutex_unlock(&socket_lock);
                 printf("[client] Server ACK: Total sum = %d\n", msg.value);
                 return 0;
             }
@@ -203,11 +217,13 @@ void* display_status(void *arg) {
 
     while (1) {
         // Aguarda a confirmação (ACK) do servidor
+        pthread_mutex_lock(&socket_lock);
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)&server_addr, &addr_len) < 0) {
             perror("[client] Error receiving status message");
         } else {
             printf("[client] Server ACK: Total sum = %d\n", msg.value);
         }
+        pthread_mutex_unlock(&socket_lock);
     }
 
     return NULL;
