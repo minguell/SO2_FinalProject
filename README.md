@@ -9,7 +9,8 @@ O sistema é composto por dois programas:
 - **Cliente (`client.c`)**: Envia números inteiros ao servidor e exibe as respostas.
 
 ### Funcionalidades
-1. **Descoberta**: O cliente utiliza mensagens de broadcast para localizar o servidor.
+1. **Descoberta**:
+   - O cliente utiliza mensagens de broadcast para localizar o servidor.
 2. **Processamento**: 
    - O servidor processa cada requisição de forma concorrente, utilizando uma thread por requisição.
    - A soma é mantida de forma consistente com controle de exclusão mútua.
