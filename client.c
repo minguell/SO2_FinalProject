@@ -33,7 +33,6 @@ void* send_numbers(void *arg);
 int main(int argc, char *argv[]) {
     int sockfd;
     pthread_t send_thread;
-    int port = atoi(argv[1]);
     listen_port = atoi(argv[1]);
     disco_port = listen_port + 1;
 
