@@ -167,6 +167,9 @@ void* send_numbers(void *arg) {
 
      while (1) {
         if (scanf("%d", &number) != 1) {
+            if (scanf("%d", &number) == EOF){
+                exit(0);
+            }
             fprintf(stderr, "[client] Entrada inválida. Por favor, digite um número inteiro.\n");
             // Limpa o buffer caso a entrada não seja válida
             while (getchar() != '\n');
