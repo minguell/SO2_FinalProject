@@ -13,6 +13,17 @@
 
 #define BUFFER_SIZE 1024
 #define NUM_MAX_CLIENT 10
+#define SERVER_ID 1 // ID único do servidor (mude para outros servidores)
+#define NUM_BACKUP_SERVERS 2 // Número de servidores secundários
+
+struct backup_server {
+    struct sockaddr_in addr;
+    int id;
+    int is_active;
+};
+
+struct backup_server backup_servers[NUM_BACKUP_SERVERS];
+int is_primary = 1; // Define se este servidor é o líder (primário)
 
 // Estrutura para armazenar informações de cada cliente
 struct client_info {
@@ -59,9 +70,14 @@ void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
 void* process_request_thread(void* arg);
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum);
+void init_backup_servers();
+void propagate_state_to_backups();
+void start_leader_election();
+void notify_clients_and_backups_of_new_leader();
+void* monitor_leader(void* arg);
 
 int main(int argc, char *argv[]) {
-    pthread_t discovery_thread, listen_thread;
+    pthread_t discovery_thread, listen_thread, monitor_thread;
     listen_port = atoi(argv[1]);
     disco_port = listen_port + 1;
     // Inicializa as informações dos clientes
@@ -80,6 +96,12 @@ int main(int argc, char *argv[]) {
     if (pthread_create(&listen_thread, NULL, listen_handler, NULL) != 0) {
         perror("[server] Error creating listen thread");
         exit(EXIT_FAILURE);
+    }
+
+    // Cria uma thread para monitorar o líder
+    if (pthread_create(&monitor_thread, NULL, (void *(*)(void *))monitor_leader, NULL) != 0) {
+    perror("[server] Error creating monitor leader thread");
+    exit(EXIT_FAILURE);
     }
 
     // Aguarda as threads terminarem (nunca terminam neste caso)
@@ -238,6 +260,7 @@ void process_request(struct message *msg, struct sockaddr_in *client_addr, sockl
     }
 
     write_total_sum(msg->value);
+    propagate_state_to_backups();
 
     // Exibe detalhes da requisição
     exibirDetalhesRequisicao(client_addr, msg->seq_num, num_reqs, total_sum);
@@ -388,5 +411,113 @@ void* process_request_thread(void* arg) {
     send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum);
 
     free(data); // Libera a memória alocada
+    pthread_exit(NULL);
+}
+
+void init_backup_servers() {
+    // Configure os endereços IP e portas dos servidores de backup
+    memset(backup_servers, 0, sizeof(backup_servers));
+
+    // Exemplo de configuração (ajuste conforme necessário)
+    backup_servers[0].addr.sin_family = AF_INET;
+    backup_servers[0].addr.sin_port = htons(5001); // Porta do primeiro backup
+    backup_servers[0].addr.sin_addr.s_addr = inet_addr("127.0.0.2");
+    backup_servers[0].id = 2;
+    backup_servers[0].is_active = 1;
+
+    backup_servers[1].addr.sin_family = AF_INET;
+    backup_servers[1].addr.sin_port = htons(5002); // Porta do segundo backup
+    backup_servers[1].addr.sin_addr.s_addr = inet_addr("127.0.0.3");
+    backup_servers[1].id = 3;
+    backup_servers[1].is_active = 1;
+}
+
+void propagate_state_to_backups() {
+    if (!is_primary) return; // Apenas o líder envia atualizações
+
+    struct message sync_msg;
+    sync_msg.type = 3; // Tipo de mensagem para sincronização
+    sync_msg.seq_num = 0;
+    sync_msg.value = total_sum;
+
+    for (int i = 0; i < NUM_BACKUP_SERVERS; i++) {
+        if (backup_servers[i].is_active) {
+            if (sendto(sockfd, &sync_msg, sizeof(sync_msg), 0,
+                       (struct sockaddr *)&backup_servers[i].addr,
+                       sizeof(backup_servers[i].addr)) < 0) {
+                perror("[server] Error sending state to backup");
+            }
+        }
+    }
+}
+
+void start_leader_election() {
+    printf("[server] Leader election started...\n");
+
+    int highest_id = SERVER_ID;
+    for (int i = 0; i < NUM_BACKUP_SERVERS; i++) {
+        if (backup_servers[i].is_active && backup_servers[i].id > highest_id) {
+            highest_id = backup_servers[i].id;
+        }
+    }
+
+    if (highest_id == SERVER_ID) {
+        printf("[server] I am the new leader.\n");
+        is_primary = 1;
+
+        // Notifica os backups e clientes
+        notify_clients_and_backups_of_new_leader();
+    } else {
+        printf("[server] Waiting for notification from new leader...\n");
+        is_primary = 0;
+    }
+}
+
+void notify_clients_and_backups_of_new_leader() {
+    struct message leader_msg;
+    leader_msg.type = 2; // Notificação de novo líder
+    leader_msg.seq_num = 0;
+    leader_msg.value = SERVER_ID;
+
+    // Notifica os backups
+    for (int i = 0; i < NUM_BACKUP_SERVERS; i++) {
+        if (backup_servers[i].is_active) {
+            sendto(sockfd, &leader_msg, sizeof(leader_msg), 0,
+                   (struct sockaddr *)&backup_servers[i].addr,
+                   sizeof(backup_servers[i].addr));
+        }
+    }
+
+    // Notifica os clientes (broadcast)
+    struct sockaddr_in broadcast_addr;
+    memset(&broadcast_addr, 0, sizeof(broadcast_addr));
+    broadcast_addr.sin_family = AF_INET;
+    broadcast_addr.sin_port = htons(disco_port);
+    broadcast_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+    sendto(sockfd, &leader_msg, sizeof(leader_msg), 0,
+           (struct sockaddr *)&broadcast_addr, sizeof(broadcast_addr));
+}
+
+void* monitor_leader(void* arg) {
+    while (1) {
+        sleep(5); // Verifica a cada 5 segundos
+
+        if (!is_primary) {
+            struct message ping_msg;
+            ping_msg.type = 4; // Ping para o líder
+            ping_msg.seq_num = 0;
+            ping_msg.value = 0;
+
+            if (sendto(sockfd, &ping_msg, sizeof(ping_msg), 0,
+                       (struct sockaddr *)&backup_servers[0].addr,
+                       sizeof(backup_servers[0].addr)) < 0) {
+                perror("[server] Failed to ping leader. Starting election...");
+                start_leader_election();
+                break; // Sai do loop para iniciar uma nova eleição
+            }
+        }
+    }
+
     pthread_exit(NULL);
 }
