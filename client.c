@@ -73,38 +73,41 @@ int main(int argc, char *argv[]) {
 
 void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
-    msg.type = 0; // Tipo de mensagem de descoberta
+    msg.type = 0; // Mensagem de descoberta
     msg.seq_num = 0;
     msg.value = 0;
 
-    // Configura o endereço de broadcast
+    // Configura broadcast
     memset(server_addr, 0, sizeof(*server_addr));
     server_addr->sin_family = AF_INET;
     server_addr->sin_port = htons(disco_port); // Porta de descoberta
-    server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
+    server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para toda a rede
 
-    printf("[client] Enviando mensagem de descoberta para todos na rede...\n");
+    printf("[client] Enviando mensagem de descoberta para nova eleição...\n");
 
-    // Envia a mensagem de descoberta via broadcast
     if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
-        perror("[client] Erro ao enviar mensagem de descoberta");
+        perror("[client] Falha ao enviar mensagem de descoberta");
         exit(EXIT_FAILURE);
     }
-    printf("[client] Mensagem de descoberta enviada...\n");
 }
 
 void process_server_response(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
     socklen_t addr_len = sizeof(*server_addr);
 
-    // Aguarda a resposta do servidor
     if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
-        perror("[client] Error receiving server response");
+        perror("[client] Erro ao receber resposta do servidor");
         exit(EXIT_FAILURE);
     }
 
-    printf("[client] Server response received. Type: %d, Seq_num: %d, Value: %d\n",
-           msg.type, msg.seq_num, msg.value);
+    if (msg.type == 2) { // Notificação de novo líder
+        printf("[client] Novo líder identificado. Atualizando endereço...\n");
+        server_addr->sin_addr.s_addr = inet_addr("novo_ip_lider"); // Substituir pelo IP real
+        server_addr->sin_port = htons(msg.value); // Atualiza porta do novo líder
+    } else {
+        printf("[client] Resposta do servidor: Tipo = %d, Seq_num = %d, Valor = %d\n",
+               msg.type, msg.seq_num, msg.value);
+    }
 }
 
 void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int seq_num) {
@@ -142,8 +145,9 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     if (retval == -1) {
         perror("[client] Error in select");
     } else if (retval == 0) {
-        printf("[client] Timeout, resending number: %d with sequence number: %d\n", number, seq_num);
-        send_number(sockfd, server_addr, number, seq_num);
+        printf("[client] Timeout detected. Trying to discover new primary server...\n");
+        send_discovery_message(sockfd, server_addr); // Solicita o novo líder
+        process_server_response(sockfd, server_addr); // Atualiza o endereço do RM primário
     } else {
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
             perror("[client] Error receiving ACK");
@@ -165,7 +169,7 @@ void* send_numbers(void *arg) {
     server_addr.sin_port = htons(listen_port);
     server_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST); // Substitua "143.54.49.184" pelo endereço IP real do servidor
 
-     while (1) {
+    while (1) {
         if (scanf("%d", &number) != 1) {
             if (scanf("%d", &number) == EOF){
                 exit(0);
