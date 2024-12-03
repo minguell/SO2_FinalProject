@@ -163,7 +163,7 @@ void* send_numbers(void *arg) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(listen_port);
-    server_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST); // Substitua "143.54.49.184" pelo endereço IP real do servidor
+    server_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST); 
 
      while (1) {
         if (scanf("%d", &number) != 1) {
