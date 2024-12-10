@@ -260,11 +260,10 @@ void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len,
 void exibirStatusInicial(int num_reqs, int total_sum) {
     time_t t = time(NULL);
     struct tm *now = localtime(&t);
-    printf("Status Inicial:\n");
-    printf("Data: %d-%02d-%02d\n", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
-    printf("Hora: %02d:%02d:%02d\n", now->tm_hour, now->tm_min, now->tm_sec);
-    printf("Número de Requisições: %d\n", num_reqs);
-    printf("Soma Total: %d\n", total_sum);
+    printf("%d-%02d-%02d", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
+    printf(" %02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
+    printf(" num_reqs %d", num_reqs);
+    printf(" total_sum %d\n", total_sum);
 }
 
 // Encontra o índice do cliente na tabela
