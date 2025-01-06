@@ -456,19 +456,36 @@ void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_ser
     }
 }
 
-void processElectionResponse(int sockfd, struct sockaddr_in *server_addr){
+void processElectionResponse(int sockfd, struct sockaddr_in *server_addr) {
     struct message msg;
     socklen_t addr_len = sizeof(*server_addr);
 
-    // Aguarda a resposta do servidor
-    if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
-        perror("server erro ao receber mensagem de eleicao");
+    // Configura o timeout para o recvfrom
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // Tempo de espera em segundos (ajuste conforme necessário)
+    timeout.tv_usec = 0; // Tempo de espera em microssegundos
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+        perror("server erro ao configurar timeout no socket");
         exit(EXIT_FAILURE);
     }
 
-    if (msg.type != 3){
-        server.im_leader = 1;
+    // Aguarda a resposta do servidor
+    if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
+            // Timeout ocorreu
+            printf("server timeout na espera por resposta de eleicao\n");
+            server.im_leader = 1; // Assume liderança se ninguém responder
+        } else {
+            // Outro erro ocorreu
+            perror("server erro ao receber mensagem de eleicao");
+            exit(EXIT_FAILURE);
+        }
     } else {
-        server.im_leader = 0;
+        // Processa a resposta recebida
+        if (msg.type != 3) {
+            server.im_leader = 1; // Servidor atual é o líder
+        } else {
+            server.im_leader = 0; // Outro servidor é o líder
+        }
     }
 }
