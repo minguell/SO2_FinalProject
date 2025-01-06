@@ -36,6 +36,7 @@ struct message {
     int type;
     int seq_num;
     int value;
+    long long id_server;
 };
 
 struct request_thread_data {
@@ -52,6 +53,7 @@ int total_sum = 0;
 int num_reqs = 0;
 int listen_port = 0;
 int disco_port = 0;
+struct server_data server;
 
 // Prototipação das funções
 void init_client_info();
@@ -69,9 +71,9 @@ void write_total_sum(int value);
 void* process_request_thread(void* arg);
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum, char* men, int req_val);
 long long obterTimestampMicrosegundos();
+void iniciarEleicao(long long id_server, int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 
-int main(int argc, char *argv[]) {
-    struct server_data server;
+int main(int argc, char *argv[]) { 
     server.id_server = obterTimestampMicrosegundos();
     server.im_leader = 0;  
     server.leader_addr = 0; 
@@ -84,7 +86,6 @@ int main(int argc, char *argv[]) {
 
     // Exibe o status inicial
     exibirStatusInicial(num_reqs, total_sum);
-
 
     // Cria uma thread para escutar mensagens de descoberta
     if (pthread_create(&discovery_thread, NULL, discovery_handler, NULL) != 0) {
@@ -134,7 +135,7 @@ void* discovery_handler(void *arg) {
     }
 
     // Cria o socket UDP para descoberta de outros servidores
-    if ((sockfd2 = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+  /*  if ((sockfd2 = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("server error creating server discovery socket");
         pthread_exit(NULL);
     }
@@ -150,7 +151,9 @@ void* discovery_handler(void *arg) {
         perror("server error binding server discovery socket");
         close(sockfd2);
         pthread_exit(NULL);
-    }
+    }*/
+
+    iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
 
     while (1) {
         
@@ -168,16 +171,29 @@ void* discovery_handler(void *arg) {
             
         } 
         
-        int m = recvfrom(sockfd2, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&other_server_addr, &other_server_len);
+     /*   int m = recvfrom(sockfd2, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&other_server_addr, &other_server_len);
         
         if (m < 0) {
             perror("server error receiving discovery message");
             continue;
         }
-        memcpy(&msg, buffer, sizeof(msg));
+        memcpy(&msg, buffer, sizeof(msg));*/
         
         if(msg.type == 2){
-            handle_server_discovery(sockfd, &other_server_addr, other_server_len);
+            if(msg.id_server > server.id_server){
+                handle_server_discovery(sockfd, &client_addr, client_len);
+            }
+        }
+
+        if(msg.type == 4){
+            iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
+            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        
+            if (n < 0) {
+                server.im_leader = 1;
+            } else {
+                server.im_leader = 0;
+            }
         }
     }
 
@@ -192,61 +208,63 @@ void* listen_handler(void *arg) {
     socklen_t client_len = sizeof(client_addr);
     char buffer[BUFFER_SIZE];
 
-    // Cria o socket UDP para comunicação padrão
-    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("server error creating listen socket");
-        pthread_exit(NULL);
-    }
-
-    // Configura o endereço do servidor para comunicação padrão
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
-    server_addr.sin_port = htons(listen_port);
-
-    // Faz o bind do socket
-    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("server error binding listen socket");
-        close(sockfd);
-        pthread_exit(NULL);
-    }
-
-    while (1) {
-        int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
-
-        if (n < 0) {
-            perror("server error receiving client message");
-            continue;
+    if(server.im_leader){
+        // Cria o socket UDP para comunicação padrão
+        if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+            perror("server error creating listen socket");
+            pthread_exit(NULL);
         }
 
-        struct message msg;
-        memcpy(&msg, buffer, sizeof(msg));
+        // Configura o endereço do servidor para comunicação padrão
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
+        server_addr.sin_port = htons(listen_port);
 
+        // Faz o bind do socket
+        if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+            perror("server error binding listen socket");
+            close(sockfd);
+            pthread_exit(NULL);
+        }
 
-        if (msg.type == 1) { // Mensagem de requisição
-            // Aloca memória para os dados da thread
-            struct request_thread_data* data = malloc(sizeof(struct request_thread_data));
-            if (!data) {
-                perror("server memory allocation failed");
+        while (1) {
+            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+
+            if (n < 0) {
+                perror("server error receiving client message");
                 continue;
             }
 
-            data->msg = msg;
-            data->client_addr = client_addr;
-            data->client_len = client_len;
-            data->sockfd = sockfd;
+            struct message msg;
+            memcpy(&msg, buffer, sizeof(msg));
 
-            // Cria uma thread para processar a requisição
-            pthread_t thread_id;
-            if (pthread_create(&thread_id, NULL, process_request_thread, data) != 0) {
-                perror("server error creating thread for request");
-                free(data); // Libera a memória em caso de falha
+
+            if (msg.type == 1) { // Mensagem de requisição
+                // Aloca memória para os dados da thread
+                struct request_thread_data* data = malloc(sizeof(struct request_thread_data));
+                if (!data) {
+                    perror("server memory allocation failed");
+                    continue;
+                }
+
+                data->msg = msg;
+                data->client_addr = client_addr;
+                data->client_len = client_len;
+                data->sockfd = sockfd;
+
+                // Cria uma thread para processar a requisição
+                pthread_t thread_id;
+                if (pthread_create(&thread_id, NULL, process_request_thread, data) != 0) {
+                    perror("server error creating thread for request");
+                    free(data); // Libera a memória em caso de falha
+                } else {
+                    pthread_detach(thread_id); // Permite que a thread libere seus recursos ao finalizar
+                }
             } else {
-                pthread_detach(thread_id); // Permite que a thread libere seus recursos ao finalizar
-            }
-        } else {
-            printf("server unknown message type received.\n");
+                printf("server unknown message type received.\n");
 
+            }
         }
     }
 
@@ -296,6 +314,7 @@ void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len,
     ack_msg.type = 1; // ACK type
     ack_msg.seq_num = num_reqs;
     ack_msg.value = sum;
+    ack_msg.id_server = 0;
 
     sendto(sockfd, &ack_msg, sizeof(ack_msg), 0, (struct sockaddr *)client_addr, client_len);
 }
@@ -348,6 +367,7 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
     response.type = 1; // Resposta ao cliente
     response.seq_num = 0;
     response.value = 0;
+    response.id_server = 0;
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)client_addr, client_len) < 0) {
@@ -359,9 +379,10 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
 void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len) {
 
     struct message response;
-    response.type = 3; // Resposta ao cliente
+    response.type = 3; // Resposta a eleicao
     response.seq_num = 0;
     response.value = 0;
+    response.id_server = server.id_server;
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
@@ -451,4 +472,17 @@ void* process_request_thread(void* arg) {
 
     free(data); // Libera a memória alocada
     pthread_exit(NULL);
+}
+
+void iniciarEleicao(long long id_server, int sockfd, struct sockaddr_in *server_addr, socklen_t server_len){
+    struct message response;
+    response.type = 2; // Mensagem de eleicao
+    response.seq_num = 0;
+    response.value = 0;
+    response.id_server = id_server;
+
+    // Responde com o endereço de escuta do servidor
+    if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
+        perror("server erro ao enviar resposta de descoberta");
+    }
 }

@@ -19,6 +19,7 @@ struct message {
     int type;
     int seq_num;
     int value;
+    long long id_server;
 };
 
 int listen_port = 0;
@@ -31,6 +32,7 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
 void* send_numbers(void *arg);
 void exibirStatusInicial(struct sockaddr_in *server_addr);
 void exibirDetalhesRequisicao(struct sockaddr_in *server_addr, int seq_num, int num_reqs, int total_sum, int req_val);
+void sendKeepAliveMessage(int sockfd, struct sockaddr_in *server_addr);
 
 int main(int argc, char *argv[]) {
     int sockfd;
@@ -76,6 +78,7 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     msg.type = 0; // Tipo de mensagem de descoberta
     msg.seq_num = 0;
     msg.value = 0;
+    msg.id_server = 0;
 
     // Configura o endereço de broadcast
     memset(server_addr, 0, sizeof(*server_addr));
@@ -109,6 +112,7 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
     msg.type = 1; // Request type
     msg.seq_num = seq_num;
     msg.value = number;
+    msg.id_server = 0;
 
     // Envia o número ao servidor
     if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
@@ -137,7 +141,14 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     if (retval == -1) {
         perror("client error in select");
     } else if (retval == 0) {
-        send_number(sockfd, server_addr, number, seq_num);
+        sendKeepAliveMessage(sockfd, server_addr);
+        // Aguarda a resposta do servidor
+        if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
+            perror("client error receiving server response");
+            exit(EXIT_FAILURE);
+        } else{
+            send_number(sockfd, server_addr, number, seq_num);
+        }
     } else {
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
             perror("client error receiving ACK");
@@ -178,7 +189,7 @@ void* send_numbers(void *arg) {
 }
 
 // Exibe o status inicial
-    void exibirStatusInicial(struct sockaddr_in *server_addr) {
+void exibirStatusInicial(struct sockaddr_in *server_addr) {
     time_t t = time(NULL);
     struct tm *now = localtime(&t);
     char ip[INET_ADDRSTRLEN];
@@ -202,4 +213,24 @@ void exibirDetalhesRequisicao(struct sockaddr_in *server_addr, int seq_num, int 
     printf(" value %d", req_val);
     printf(" num_reqs %d", num_reqs);
     printf(" total_sum %d\n", total_sum);
+}
+
+void sendKeepAliveMessage(int sockfd, struct sockaddr_in *server_addr) {
+    struct message msg;
+    msg.type = 4; // Tipo de mensagem Keep Alive
+    msg.seq_num = 0;
+    msg.value = 0;
+    msg.id_server = 0;
+
+    // Configura o endereço de broadcast
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(disco_port); // Porta de descoberta
+    server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
+
+    // Envia a mensagem de descoberta via broadcast
+    if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
+        perror("client erro ao enviar mensagem de descoberta");
+        exit(EXIT_FAILURE);
+    }
 }
