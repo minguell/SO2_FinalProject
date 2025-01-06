@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
 #include <errno.h>
 
 #define BUFFER_SIZE 1024
@@ -21,6 +22,13 @@ struct client_info {
     int last_seq_num;
     int partial_sum;
     char is_active;
+};
+
+
+struct server_data {
+    int im_leader;
+    long long id_server; // Timestamp em microsec desde a Unix --lembrar de usar "<" para comparar
+    int leader_addr;
 };
 
 // Estrutura para mensagens
@@ -60,8 +68,14 @@ void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
 void* process_request_thread(void* arg);
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum, char* men, int req_val);
+long long obterTimestampMicrosegundos();
 
 int main(int argc, char *argv[]) {
+    struct server_data server;
+    server.id_server = obterTimestampMicrosegundos();
+    server.im_leader = 0;  
+    server.leader_addr = 0; 
+
     pthread_t discovery_thread, listen_thread;
     listen_port = atoi(argv[1]);
     disco_port = listen_port + 1;
@@ -70,6 +84,7 @@ int main(int argc, char *argv[]) {
 
     // Exibe o status inicial
     exibirStatusInicial(num_reqs, total_sum);
+
 
     // Cria uma thread para escutar mensagens de descoberta
     if (pthread_create(&discovery_thread, NULL, discovery_handler, NULL) != 0) {
@@ -287,6 +302,16 @@ void exibirStatusInicial(int num_reqs, int total_sum) {
     printf(" %02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
     printf(" num_reqs %d", num_reqs);
     printf(" total_sum %d\n", total_sum);
+    
+}
+
+// Função para obter o timestamp em microsegundos desde a época Unix
+long long obterTimestampMicrosegundos() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    
+    // Converte para microsegundos
+    return (long long)tv.tv_sec * 1000000 + tv.tv_usec;
 }
 
 // Encontra o índice do cliente na tabela
