@@ -336,6 +336,7 @@ void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, sockle
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
         perror("server erro ao enviar resposta de descoberta");
     }
+    printf("Servidor conectado");
 }
 
 // Função para leitura do total_sum e num_reqs
