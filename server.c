@@ -69,7 +69,7 @@ void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int 
 void iniciarEleicao(int id_server);
 void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_server);
 void processElectionResponse(int sockfd, struct sockaddr_in *server_addr);
-
+int obterTimestampMicrosegundos();
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -287,7 +287,7 @@ void exibirStatusInicial(int num_reqs, int total_sum) {
 }
 
 // Função para obter o timestamp em microsegundos desde a época Unix
-long long obterTimestampMicrosegundos() {
+int obterTimestampMicrosegundos() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     
