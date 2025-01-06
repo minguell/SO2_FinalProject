@@ -50,7 +50,7 @@ void init_client_info();
 void* discovery_handler(void *arg);
 void* listen_handler(void *arg);
 void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
-void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum, int num_reqs)
+void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum, int num_reqs);
 void exibirStatusInicial(int num_reqs, int total_sum);
 int find_client(struct sockaddr_in *client_addr);
 void update_client_info(int client_index, int seq_num, int value);

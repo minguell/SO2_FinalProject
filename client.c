@@ -185,7 +185,7 @@ void* send_numbers(void *arg) {
     inet_ntop(AF_INET, &(server_addr->sin_addr), ip, INET_ADDRSTRLEN);
     printf("%d-%02d-%02d", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
     printf(" %02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
-    printf(" server addr %d", ip);
+    printf(" server addr %s", ip);
 }
 
 // Exibe detalhes da requisição
