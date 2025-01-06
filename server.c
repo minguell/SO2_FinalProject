@@ -62,6 +62,7 @@ void exibirStatusInicial(int num_reqs, int total_sum);
 int find_client(struct sockaddr_in *client_addr);
 void update_client_info(int client_index, int seq_num, int value);
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len);
+void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
 void* process_request_thread(void* arg);
@@ -148,6 +149,10 @@ void* discovery_handler(void *arg) {
         if (msg.type == 0) { // Mensagem de descoberta
             handle_discovery(sockfd, &client_addr, client_len);
             
+        } else if(msg.type == 2) {
+            if(msg.value > server.id_server){
+                handle_server_discovery(sockfd, &client_addr, client_len);
+            }
         }
     }
 
@@ -328,6 +333,21 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
     }
 }
 
+// Lida com a mensagem de descoberta
+void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len) {
+
+    struct message response;
+    response.type = 3; // Resposta a eleicao
+    response.seq_num = 0;
+    response.value = server.id_server;
+
+    // Responde com o endereço de escuta do servidor
+    if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
+        perror("server erro ao enviar resposta de eleicao");
+    }
+    printf("Servidor conectado");
+}
+
 // Função para leitura do total_sum e num_reqs
 void read_total_sum(int *num_reqs_ptr, int *total_sum_ptr) {
     pthread_mutex_lock(&lock);
@@ -413,7 +433,6 @@ void* process_request_thread(void* arg) {
 
 void iniciarEleicao(int id_server){
     int sockfd;
-    pthread_t send_thread;
 
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
