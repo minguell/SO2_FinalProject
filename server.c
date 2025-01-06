@@ -154,6 +154,13 @@ void* discovery_handler(void *arg) {
     }*/
 
     iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
+    int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        
+    if (n < 0) {
+        server.im_leader = 1;
+    } else {
+        server.im_leader = 0;
+    }
 
     while (1) {
         
@@ -486,6 +493,6 @@ void iniciarEleicao(long long id_server, int sockfd, struct sockaddr_in *server_
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
-        server.im_leader = 1;
+        //server.im_leader = 1;
     }
 }
