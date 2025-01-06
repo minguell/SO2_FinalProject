@@ -186,6 +186,7 @@ void* discovery_handler(void *arg) {
         }
 
         if(msg.type == 4){
+            printf("eleicao");
             iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
             int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         
