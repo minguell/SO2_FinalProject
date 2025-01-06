@@ -108,20 +108,14 @@ int main(int argc, char *argv[]) {
 // Thread para lidar com mensagens de descoberta
 void* discovery_handler(void *arg) {
     int sockfd, sockfd2;
-    struct sockaddr_in server_addr, client_addr, server2_addr;
-    socklen_t client_len = sizeof(client_addr), server2_len = sizeof(server2_addr);
+    struct sockaddr_in server_addr, client_addr, server2_addr, other_server_addr;
+    socklen_t client_len = sizeof(client_addr), other_server_len = sizeof(other_server_addr);
     char buffer[BUFFER_SIZE];
 
 
     // Cria o socket UDP para descoberta de clients
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("server error creating discovery socket");
-        pthread_exit(NULL);
-    }
-
-    // Cria o socket UDP para descoberta de outros servidores
-    if ((sockfd2 = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("server error creating discovery socket");
+        perror("server error creating client discovery socket");
         pthread_exit(NULL);
     }
 
@@ -134,14 +128,26 @@ void* discovery_handler(void *arg) {
 
     // Faz o bind do socket de clientes
     if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("server error binding discovery socket");
+        perror("server error binding client discovery socket");
         close(sockfd);
         pthread_exit(NULL);
     }
 
+    // Cria o socket UDP para descoberta de outros servidores
+    if ((sockfd2 = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("server error creating server discovery socket");
+        pthread_exit(NULL);
+    }
+
+    // Configura o endereço do servidor para descoberta
+    memset(&server2_addr, 0, sizeof(server2_addr));
+    server2_addr.sin_family = AF_INET;
+    server2_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
+    server2_addr.sin_port = htons(disco_port);
+
     // Faz o bind do socket de server
-    if (bind(sockfd2, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        perror("server error binding discovery socket");
+    if (bind(sockfd2, (struct sockaddr *)&other_server_addr, sizeof(other_server_addr)) < 0) {
+        perror("server error binding server discovery socket");
         close(sockfd2);
         pthread_exit(NULL);
     }
@@ -162,7 +168,7 @@ void* discovery_handler(void *arg) {
             
         } 
         
-        int m = recvfrom(sockfd2, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&server2_addr, &server2_len);
+        int m = recvfrom(sockfd2, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&other_server_addr, &other_server_len);
         
         if (m < 0) {
             perror("server error receiving discovery message");
@@ -171,7 +177,7 @@ void* discovery_handler(void *arg) {
         memcpy(&msg, buffer, sizeof(msg));
         
         if(msg.type == 2){
-            handle_server_discovery(sockfd, &client_addr, client_len);
+            handle_server_discovery(sockfd, &other_server_addr, other_server_len);
         }
     }
 
