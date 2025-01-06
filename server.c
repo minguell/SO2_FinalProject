@@ -209,7 +209,6 @@ void* listen_handler(void *arg) {
     socklen_t client_len = sizeof(client_addr);
     char buffer[BUFFER_SIZE];
 
-    if(server.im_leader){
         // Cria o socket UDP para comunicação padrão
         if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
             perror("server error creating listen socket");
@@ -230,46 +229,47 @@ void* listen_handler(void *arg) {
         }
 
         while (1) {
-            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+            if(server.im_leader){
+                int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
 
-            if (n < 0) {
-                perror("server error receiving client message");
-                continue;
-            }
-
-            struct message msg;
-            memcpy(&msg, buffer, sizeof(msg));
-
-
-            if (msg.type == 1) { // Mensagem de requisição
-                // Aloca memória para os dados da thread
-                struct request_thread_data* data = malloc(sizeof(struct request_thread_data));
-                if (!data) {
-                    perror("server memory allocation failed");
+                if (n < 0) {
+                    perror("server error receiving client message");
                     continue;
                 }
 
-                data->msg = msg;
-                data->client_addr = client_addr;
-                data->client_len = client_len;
-                data->sockfd = sockfd;
+                struct message msg;
+                memcpy(&msg, buffer, sizeof(msg));
 
-                // Cria uma thread para processar a requisição
-                pthread_t thread_id;
-                if (pthread_create(&thread_id, NULL, process_request_thread, data) != 0) {
-                    perror("server error creating thread for request");
-                    free(data); // Libera a memória em caso de falha
+
+                if (msg.type == 1) { // Mensagem de requisição
+                    // Aloca memória para os dados da thread
+                    struct request_thread_data* data = malloc(sizeof(struct request_thread_data));
+                    if (!data) {
+                        perror("server memory allocation failed");
+                        continue;
+                    }
+
+                    data->msg = msg;
+                    data->client_addr = client_addr;
+                    data->client_len = client_len;
+                    data->sockfd = sockfd;
+
+                    // Cria uma thread para processar a requisição
+                    pthread_t thread_id;
+                    if (pthread_create(&thread_id, NULL, process_request_thread, data) != 0) {
+                        perror("server error creating thread for request");
+                        free(data); // Libera a memória em caso de falha
+                    } else {
+                        pthread_detach(thread_id); // Permite que a thread libere seus recursos ao finalizar
+                    }
                 } else {
-                    pthread_detach(thread_id); // Permite que a thread libere seus recursos ao finalizar
+                    printf("server unknown message type received.\n");
+
                 }
             } else {
-                printf("server unknown message type received.\n");
-
+                printf("em espera");
             }
         }
-    } else {
-        printf("em espera");
-    }
 
     close(sockfd);
     pthread_exit(NULL);
