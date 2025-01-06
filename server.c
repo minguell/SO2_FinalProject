@@ -267,6 +267,8 @@ void* listen_handler(void *arg) {
 
             }
         }
+    } else {
+        printf("em espera");
     }
 
     close(sockfd);
