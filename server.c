@@ -520,7 +520,7 @@ void iniciarEleicao(long long id_server){
     struct sockaddr_in server_addr;
     sendElectionMessage(sockfd, &server_addr, id_server);
 
-    proccessElectionResponse(sockfd, &server_addr);
+    processElectionResponse(sockfd, &server_addr);
 }
 
 void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, long long id_server){
