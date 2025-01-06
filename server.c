@@ -156,9 +156,17 @@ void* discovery_handler(void *arg) {
     iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
     int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         
-    if (n < 0) {
+  /*  if (n < 0) {
         server.im_leader = 1;
     } else {
+        server.im_leader = 0;
+    }*/
+
+    struct message msg;
+    memcpy(&msg, buffer, sizeof(msg));
+    if (msg.type != 2){
+        server.im_leader = 1;
+    } else{
         server.im_leader = 0;
     }
 
@@ -170,7 +178,6 @@ void* discovery_handler(void *arg) {
             perror("server error receiving discovery message");
             continue;
         }
-        struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
 
         if (msg.type == 0) { // Mensagem de descoberta
@@ -196,12 +203,17 @@ void* discovery_handler(void *arg) {
             printf("eleicao");
             iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
             int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
-        
-            if (n < 0) {
+            memcpy(&msg, buffer, sizeof(msg));
+            if (msg.type != 2){
+                server.im_leader = 1;
+            } else{
+                server.im_leader = 0;
+            }
+            /*if (n < 0) {
                 server.im_leader = 1;
             } else {
                 server.im_leader = 0;
-            }
+            }*/
         }
     }
 
