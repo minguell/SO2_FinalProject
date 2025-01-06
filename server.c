@@ -537,7 +537,9 @@ void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, long long 
     server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
 
     // Responde com o endereço de escuta do servidor
-    if (sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
+    ssize_t bytes_received = sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
+    printf("%zd", bytes_received);
+    if ( bytes_received < 0) {
         perror("server erro ao enviar mensagem de eleicao");
         exit(EXIT_FAILURE);
     }
@@ -553,7 +555,7 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr){
         exit(EXIT_FAILURE);
     }
 
-    if (msg.type != 2){
+    if (msg.type != 3){
         server.im_leader = 1;
     } else {
         server.im_leader = 0;
