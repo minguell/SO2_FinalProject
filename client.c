@@ -141,6 +141,7 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     if (retval == -1) {
         perror("client error in select");
     } else if (retval == 0) {
+        printf("Servidor morto?");
         sendKeepAliveMessage(sockfd, server_addr);
         // Aguarda a resposta do servidor
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {

@@ -386,7 +386,7 @@ void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, sockle
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
-        perror("server erro ao enviar resposta de descoberta");
+        perror("server erro ao enviar resposta de eleicao");
     }
     printf("Servidor conectado");
 }
@@ -483,6 +483,6 @@ void iniciarEleicao(long long id_server, int sockfd, struct sockaddr_in *server_
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
-        perror("server erro ao enviar resposta de descoberta");
+        server.im_leader = 1;
     }
 }
