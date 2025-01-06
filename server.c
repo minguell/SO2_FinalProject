@@ -71,7 +71,9 @@ void write_total_sum(int value);
 void* process_request_thread(void* arg);
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum, char* men, int req_val);
 long long obterTimestampMicrosegundos();
-void iniciarEleicao(long long id_server, int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
+void iniciarEleicao(long long id_server);
+void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, long long id_server);
+void processElectionResponse(int sockfd, struct sockaddr_in *server_addr);
 
 int main(int argc, char *argv[]) { 
     server.id_server = obterTimestampMicrosegundos();
@@ -153,8 +155,8 @@ void* discovery_handler(void *arg) {
         pthread_exit(NULL);
     }*/
 
-    iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
-    int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+    iniciarEleicao(server.id_server);
+    //int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         
   /*  if (n < 0) {
         server.im_leader = 1;
@@ -162,13 +164,13 @@ void* discovery_handler(void *arg) {
         server.im_leader = 0;
     }*/
 
-    struct message msg;
+  /*  struct message msg;
     memcpy(&msg, buffer, sizeof(msg));
     if (msg.type != 2){
         server.im_leader = 1;
     } else{
         server.im_leader = 0;
-    }
+    }*/
 
     while (1) {
         
@@ -178,6 +180,7 @@ void* discovery_handler(void *arg) {
             perror("server error receiving discovery message");
             continue;
         }
+        struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
 
         if (msg.type == 0) { // Mensagem de descoberta
@@ -201,14 +204,14 @@ void* discovery_handler(void *arg) {
 
         if(msg.type == 4){
             printf("eleicao");
-            iniciarEleicao(server.id_server, sockfd, &client_addr, client_len);
-            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+            iniciarEleicao(server.id_server);
+            /*int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
             memcpy(&msg, buffer, sizeof(msg));
             if (msg.type != 2){
                 server.im_leader = 1;
             } else{
                 server.im_leader = 0;
-            }
+            }*/
             /*if (n < 0) {
                 server.im_leader = 1;
             } else {
@@ -496,15 +499,58 @@ void* process_request_thread(void* arg) {
     pthread_exit(NULL);
 }
 
-void iniciarEleicao(long long id_server, int sockfd, struct sockaddr_in *server_addr, socklen_t server_len){
-    struct message response;
-    response.type = 2; // Mensagem de eleicao
-    response.seq_num = 0;
-    response.value = 0;
-    response.id_server = id_server;
+void iniciarEleicao(long long id_server){
+    int sockfd;
+    pthread_t send_thread;
+
+    // Cria o socket UDP
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("server could not create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Configura o socket para permitir broadcast
+    int broadcastEnable = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) < 0) {
+        perror("server could not enable broadcast on socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Envia mensagem de descoberta
+    struct sockaddr_in server_addr;
+    sendElectionMessage(sockfd, &server_addr, id_server);
+
+    proccessElectionResponse(sockfd, &server_addr);
+}
+
+void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, long long id_server){
+    struct message election;
+    election.type = 2; // Mensagem de eleicao
+    election.seq_num = 0;
+    election.value = 0;
+    election.id_server = id_server;
+
+    // Configura o endereço de broadcast
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(disco_port); // Porta de descoberta
+    server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
 
     // Responde com o endereço de escuta do servidor
-    if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
-        //server.im_leader = 1;
+    if (sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, server_len) < 0) {
+        perror("client erro ao enviar mensagem de descoberta");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void processElectionResponse(int sockfd, struct sockaddr_in *server_addr){
+    struct message msg;
+    socklen_t addr_len = sizeof(*server_addr);
+
+    // Aguarda a resposta do servidor
+    if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
+        server.im_leader = 1;
+    } else {
+        server.im_leader = 0;
     }
 }
