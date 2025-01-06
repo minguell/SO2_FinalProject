@@ -538,7 +538,7 @@ void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, long long 
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
-        perror("client erro ao enviar mensagem de descoberta");
+        perror("server erro ao enviar mensagem de eleicao");
         exit(EXIT_FAILURE);
     }
 }
@@ -549,6 +549,11 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr){
 
     // Aguarda a resposta do servidor
     if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
+        perror("server erro ao receber mensagem de eleicao");
+        exit(EXIT_FAILURE);
+    }
+
+    if (msg.type != 2){
         server.im_leader = 1;
     } else {
         server.im_leader = 0;
