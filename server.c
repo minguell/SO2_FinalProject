@@ -80,13 +80,15 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr);
 int obterTimestampMicrosegundos();
 void send_propagation(int sockfd, struct sockaddr_in *server_addr);
 void replicar_servidores(void);
+void* discovery_propagation(void *arg);
+void atualizaEstado(int at_req, int at_sum);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
     server.im_leader = 0;  
     server.leader_addr = 0;
 
-    pthread_t discovery_thread, listen_thread;
+    pthread_t discovery_thread, listen_thread, replication_thread;
     listen_port = atoi(argv[1]);
     disco_port = listen_port + 1;
     // Inicializa as informações dos clientes
@@ -103,6 +105,12 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Cria uma thread para escutar mensagens de replicação
+    if (pthread_create(&replication_thread, NULL, discovery_propagation, NULL) != 0) {
+        perror("server error creating discovery thread");
+        exit(EXIT_FAILURE);
+    }
+
     // Cria uma thread para escutar requisições dos clientes
     if (pthread_create(&listen_thread, NULL, listen_handler, NULL) != 0) {
         perror("server error creating listen thread");
@@ -111,6 +119,7 @@ int main(int argc, char *argv[]) {
 
     // Aguarda as threads terminarem (nunca terminam neste caso)
     pthread_join(discovery_thread, NULL);
+    pthread_join(replication_thread, NULL);
     pthread_join(listen_thread, NULL);
 
     return 0;
@@ -168,10 +177,67 @@ void* discovery_handler(void *arg) {
         if (msg.type == 4) {
                 iniciarEleicao(server.id_server);
         }
+
     }
 
     close(sockfd);
     pthread_exit(NULL);
+}
+
+
+
+// Thread para lidar com mensagens de replicação
+void* discovery_propagation(void *arg) {
+    int sockfd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+
+
+    // Cria o socket UDP para propagação
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("server error creating propagation socket");
+        pthread_exit(NULL);
+    }
+
+    // Configura o endereço do servidor para ouvir replicação
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // Escuta de qualquer endereço IP
+    server_addr.sin_port = htons(disco_port);
+
+
+    // Faz o bind do socket
+    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("server error binding propagation socket");
+        close(sockfd);
+        pthread_exit(NULL);
+    }
+
+    while (1) {
+        
+        int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        
+        if (n < 0) {
+            perror("server error receiving propagation message");
+            continue;
+        }
+        struct prop_mes msg;
+        memcpy(&msg, buffer, sizeof(msg));
+
+        if (msg.type == 5){
+            atualizaEstado(msg.num_req, msg.total_sum);
+        }
+
+    }
+
+    close(sockfd);
+    pthread_exit(NULL);
+}
+
+void atualizaEstado(int at_req, int at_sum){
+    num_reqs = at_req;
+    total_sum = at_sum;
 }
 
 // Thread para lidar com requisições de clientes
