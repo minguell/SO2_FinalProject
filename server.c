@@ -81,7 +81,7 @@ int obterTimestampMicrosegundos();
 void send_propagation(int sockfd, struct sockaddr_in *server_addr);
 void replicar_servidores(void);
 void* discovery_propagation(void *arg);
-void atualizaEstado(int at_req, int at_sum, client_info **client_info_array_at);
+void atualizaEstado(int at_req, int at_sum);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -180,7 +180,7 @@ void* discovery_handler(void *arg) {
         memcpy(&msgRep, buffer, sizeof(msgRep));
 
         if (msgRep.type == 5){
-            atualizaEstado(msgRep.num_req, msgRep.total_sum, (client_info **) msgRep.client_info_array);
+            atualizaEstado(msgRep.num_req, msgRep.total_sum);
         }
 
     }
@@ -190,22 +190,9 @@ void* discovery_handler(void *arg) {
 }
 
 
-void atualizaEstado(int at_req, int at_sum, client_info **client_info_array_at){
+void atualizaEstado(int at_req, int at_sum){
     num_reqs = at_req;
     total_sum = at_sum;
-    int i;
-
-    for (i=0;i < NUM_MAX_CLIENT;i++){
-        if (!client_info_array_at[i]->is_active) {
-                client_info_array[i].client_addr = client_info_array_at[i]->client_addr;
-                client_info_array[i].client_len = client_info_array_at[i]->client_len;
-                client_info_array[i].is_active = 1;
-                client_info_array[i].last_seq_num = client_info_array_at[i]->last_seq_num;
-                client_info_array[i].partial_sum = client_info_array_at[i]->partial_sum;
-                break;
-            }
-    }
-
 }
 
 // Thread para lidar com requisições de clientes
