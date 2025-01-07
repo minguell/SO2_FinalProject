@@ -81,7 +81,7 @@ int obterTimestampMicrosegundos();
 void send_propagation(int sockfd, struct sockaddr_in *server_addr);
 void replicar_servidores(void);
 void* discovery_propagation(void *arg);
-void atualizaEstado(int at_req, int at_sum);
+void atualizaEstado(int at_req, int at_sum, client_info client_info_array_at[NUM_MAX_CLIENT]);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -180,7 +180,7 @@ void* discovery_handler(void *arg) {
         memcpy(&msgRep, buffer, sizeof(msgRep));
 
         if (msgRep.type == 5){
-            atualizaEstado(msgRep.num_req, msgRep.total_sum);
+            atualizaEstado(msgRep.num_req, msgRep.total_sum, &msgRep.client_info_array);
         }
 
     }
@@ -190,9 +190,22 @@ void* discovery_handler(void *arg) {
 }
 
 
-void atualizaEstado(int at_req, int at_sum){
+void atualizaEstado(int at_req, int at_sum, client_info client_info_array_at[NUM_MAX_CLIENT]){
     num_reqs = at_req;
     total_sum = at_sum;
+    int i;
+
+    for (i=0;i < (sizeof(client_info_array_at)/sizeof(client_info));i++){
+        if (!client_info_array_at[i].is_active) {
+                client_info_array[i].client_addr = client_info_array_at[i].client_addr;
+                client_info_array[i].client_len = client_info_array_at[i].client_len;
+                client_info_array[i].is_active = 1;
+                client_info_array[i].last_seq_num = client_info_array_at[i].last_seq_num;
+                client_info_array[i].partial_sum = client_info_array_at[i].partial_sum;
+                break;
+            }
+    }
+
 }
 
 // Thread para lidar com requisições de clientes
@@ -259,10 +272,7 @@ void* listen_handler(void *arg) {
                 printf("server unknown message type received.\n");
 
             }
-        } else{
-            printf("em espera");
-            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
-        }
+        } 
     }
 
     close(sockfd);
@@ -345,7 +355,6 @@ void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, sockle
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
         perror("server erro ao enviar resposta de eleicao");
     }
-    printf("Servidor conectado");
 }
 
 // Função para leitura do total_sum e num_reqs
@@ -437,7 +446,6 @@ void* process_request_thread(void* arg) {
 
 
 void replicar_servidores(){
-    printf("aa");
     int sockfd;
 
     // Cria o socket UDP
@@ -474,7 +482,6 @@ void send_propagation(int sockfd, struct sockaddr_in *server_addr){
 
     // Responde com o endereço de escuta do servidor
     ssize_t bytes_received = sendto(sockfd, &propagation, sizeof(propagation), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
-    printf("%zd", bytes_received);
     if ( bytes_received < 0) {
         perror("server erro ao enviar mensagem de propagação");
         exit(EXIT_FAILURE);
@@ -521,7 +528,6 @@ void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_ser
 
     // Responde com o endereço de escuta do servidor
     ssize_t bytes_received = sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
-    printf("%zd", bytes_received);
     if ( bytes_received < 0) {
         perror("server erro ao enviar mensagem de eleicao");
         exit(EXIT_FAILURE);

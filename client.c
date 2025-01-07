@@ -119,7 +119,7 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
         perror("client error sending number");
         return;
     }
-    printf("enter timeout");
+    printf("Enter timeout \n");
     // Configura o timeout para receber a confirmação (ACK)
     handle_timeout(sockfd, server_addr, number, seq_num);
 }
@@ -138,11 +138,10 @@ void handle_timeout(int sockfd, struct sockaddr_in *server_addr, int number, int
     FD_SET(sockfd, &readfds);
     // Aguarda a confirmação (ACK) do servidor
     int retval = select(sockfd + 1, &readfds, NULL, NULL, &tv);
-    printf("%d\n",retval );
     if (retval == -1) {
         perror("client error in select");
     } else if (retval == 0) {
-        printf("Servidor morto?");
+        printf("Servidor morto? \n");
         sendKeepAliveMessage(sockfd, server_addr);
         // Aguarda a resposta do servidor
         if (recvfrom(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, &addr_len) < 0) {
