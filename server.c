@@ -21,7 +21,7 @@ struct client_info {
     int last_seq_num;
     int partial_sum;
     char is_active;
-};
+}typedef client_info;
 
 struct server_data {
     int im_leader;
@@ -34,6 +34,14 @@ struct message {
     int type;
     int seq_num;
     int value;
+};
+
+// Estrutura para mensagens
+struct prop_mes {
+    int type;
+    int num_req;
+    int total_sum;
+    client_info client_info_array[NUM_MAX_CLIENT];
 };
 
 struct request_thread_data {
@@ -70,6 +78,8 @@ void iniciarEleicao(int id_server);
 void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_server);
 void processElectionResponse(int sockfd, struct sockaddr_in *server_addr);
 int obterTimestampMicrosegundos();
+void send_propagation(int sockfd, struct sockaddr_in *server_addr);
+void replicar_servidores(void);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -393,9 +403,62 @@ void* process_request_thread(void* arg) {
     // Envia a confirmação (ACK) ao cliente
     send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum, num_reqs);
 
+
+    //Implementação replicação
+    replicar_servidores();
+
     free(data); // Libera a memória alocada
     pthread_exit(NULL);
 }
+
+
+void replicar_servidores(){
+    printf("aa");
+    int sockfd;
+
+    // Cria o socket UDP
+    if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("server could not create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Configura o socket para permitir broadcast
+    int broadcastEnable = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) < 0) {
+        perror("server could not enable broadcast on socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Envia mensagem de descoberta
+    struct sockaddr_in server_addr;
+
+    send_propagation(sockfd, &server_addr);
+
+}
+
+void send_propagation(int sockfd, struct sockaddr_in *server_addr){
+    struct prop_mes propagation;
+    propagation.type = 5; // Mensagem de propagação
+    propagation.num_req = num_reqs;
+    propagation.total_sum = total_sum;
+
+    // Configura o endereço de broadcast
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(disco_port); // Porta de descoberta
+    server_addr->sin_addr.s_addr = htonl(INADDR_BROADCAST); // Envia para todos na rede local
+
+    // Responde com o endereço de escuta do servidor
+    ssize_t bytes_received = sendto(sockfd, &propagation, sizeof(propagation), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
+    printf("%zd", bytes_received);
+    if ( bytes_received < 0) {
+        perror("server erro ao enviar mensagem de propagação");
+        exit(EXIT_FAILURE);
+    }
+
+}
+
+
 
 void iniciarEleicao(int id_server){
     int sockfd;
