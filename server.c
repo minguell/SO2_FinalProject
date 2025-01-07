@@ -57,7 +57,7 @@ void init_client_info();
 void* discovery_handler(void *arg);
 void* listen_handler(void *arg);
 void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
-void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum);
+void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum, int seq);
 void exibirStatusInicial(int num_reqs, int total_sum);
 int find_client(struct sockaddr_in *client_addr);
 void update_client_info(int client_index, int seq_num, int value);
@@ -154,9 +154,9 @@ void* discovery_handler(void *arg) {
                 handle_server_discovery(sockfd, &client_addr, client_len);
                 iniciarEleicao(server.id_server);
             }
-        } /*else if (msg.type == 4) {
+        } else if (msg.type == 4) {
                 iniciarEleicao(server.id_server);
-        }*/
+        }
     }
 
     close(sockfd);
@@ -256,7 +256,7 @@ void process_request(struct message *msg, struct sockaddr_in *client_addr, sockl
     } else {
         if (msg->seq_num <= client_info_array[client_index].last_seq_num) {
             exibirDetalhesRequisicao(client_addr, msg->seq_num, num_reqs, total_sum," DUP!! ", msg->value);
-            send_ack(sockfd, client_addr, client_len, client_info_array[client_index].partial_sum);
+            send_ack(sockfd, client_addr, client_len, client_info_array[client_index].partial_sum, num_reqs);
             return;
         }
 
@@ -269,14 +269,14 @@ void process_request(struct message *msg, struct sockaddr_in *client_addr, sockl
     exibirDetalhesRequisicao(client_addr, msg->seq_num, num_reqs, total_sum,"", msg->value);
 
     // Envia a confirmação (ACK) ao cliente
-    send_ack(sockfd, client_addr, client_len, total_sum);
+    send_ack(sockfd, client_addr, client_len, total_sum, num_reqs);
 }
 
 // Envia a confirmação (ACK) ao cliente
-void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum) {
+void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum, int seq) {
     struct message ack_msg;
     ack_msg.type = 1; // ACK type
-    ack_msg.seq_num = 0;
+    ack_msg.seq_num = seq;
     ack_msg.value = sum;
 
     sendto(sockfd, &ack_msg, sizeof(ack_msg), 0, (struct sockaddr *)client_addr, client_len);
@@ -414,7 +414,7 @@ void* process_request_thread(void* arg) {
     } else {
         if (data->msg.seq_num <= client_info_array[client_index].last_seq_num) {
             exibirDetalhesRequisicao(&(data->client_addr), data->msg.seq_num, num_reqs, total_sum," DUP!! ", data->msg.value);
-            send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum);
+            send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum, num_reqs);
             free(data); // Libera a memória alocada
             pthread_exit(NULL);
         }
@@ -428,7 +428,7 @@ void* process_request_thread(void* arg) {
         exibirDetalhesRequisicao(&(data->client_addr), data->msg.seq_num, num_reqs, total_sum, "", data->msg.value);
 
     // Envia a confirmação (ACK) ao cliente
-    send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum);
+    send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum, num_reqs);
 
     free(data); // Libera a memória alocada
     pthread_exit(NULL);
