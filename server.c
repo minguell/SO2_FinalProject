@@ -155,15 +155,17 @@ void* discovery_handler(void *arg) {
         struct message msg;
         memcpy(&msg, buffer, sizeof(msg));
 
-        if (msg.type == 0) { // Mensagem de descoberta
+        if (msg.type == 0 && server.im_leader == 1) { // Mensagem de descoberta
             handle_discovery(sockfd, &client_addr, client_len);
             
-        } else if (msg.type == 2) {
+        } 
+        if (msg.type == 2) {
             if(msg.value > server.id_server){
                 handle_server_discovery(sockfd, &client_addr, client_len);
                 iniciarEleicao(server.id_server);
             }
-        } else if (msg.type == 4) {
+        } 
+        if (msg.type == 4) {
                 iniciarEleicao(server.id_server);
         }
     }
