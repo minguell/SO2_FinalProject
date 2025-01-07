@@ -149,10 +149,12 @@ void* discovery_handler(void *arg) {
         if (msg.type == 0) { // Mensagem de descoberta
             handle_discovery(sockfd, &client_addr, client_len);
             
-        } else if(msg.type == 2) {
+        } else if (msg.type == 2) {
             if(msg.value > server.id_server){
                 handle_server_discovery(sockfd, &client_addr, client_len);
             }
+        } else if (msg.type == 4) {
+                iniciarEleicao(server.id_server);
         }
     }
 
