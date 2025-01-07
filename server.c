@@ -261,6 +261,7 @@ void* listen_handler(void *arg) {
             }
         } else{
             printf("em espera");
+            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         }
     }
 
@@ -533,7 +534,7 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr) {
 
     // Configura o timeout para o recvfrom
     struct timeval timeout;
-    timeout.tv_sec = 5;  // Tempo de espera em segundos (ajuste conforme necessário)
+    timeout.tv_sec = 4;  // Tempo de espera em segundos (ajuste conforme necessário)
     timeout.tv_usec = 0; // Tempo de espera em microssegundos
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         perror("server erro ao configurar timeout no socket");
