@@ -56,7 +56,6 @@ struct server_data server;
 void init_client_info();
 void* discovery_handler(void *arg);
 void* listen_handler(void *arg);
-void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd);
 void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum, int seq);
 void exibirStatusInicial(int num_reqs, int total_sum);
 int find_client(struct sockaddr_in *client_addr);
@@ -236,42 +235,6 @@ void* listen_handler(void *arg) {
     pthread_exit(NULL);
 }
 
-// Processa a requisição recebida
-void process_request(struct message *msg, struct sockaddr_in *client_addr, socklen_t client_len, int sockfd) {
-    int client_index = find_client(client_addr);
-
-    if (client_index == -1) {
-        pthread_mutex_lock(&lock);
-        for (int i = 0; i < NUM_MAX_CLIENT; i++) {
-            if (!client_info_array[i].is_active) {
-                client_info_array[i].client_addr = *client_addr;
-                client_info_array[i].client_len = client_len;
-                client_info_array[i].is_active = 1;
-                client_info_array[i].last_seq_num = msg->seq_num;
-                client_info_array[i].partial_sum = msg->value;
-                break;
-            }
-        }
-        pthread_mutex_unlock(&lock);
-    } else {
-        if (msg->seq_num <= client_info_array[client_index].last_seq_num) {
-            exibirDetalhesRequisicao(client_addr, msg->seq_num, num_reqs, total_sum," DUP!! ", msg->value);
-            send_ack(sockfd, client_addr, client_len, client_info_array[client_index].partial_sum, num_reqs);
-            return;
-        }
-
-        update_client_info(client_index, msg->seq_num, msg->value);
-    }
-
-    write_total_sum(msg->value);
-
-    // Exibe detalhes da requisição
-    exibirDetalhesRequisicao(client_addr, msg->seq_num, num_reqs, total_sum,"", msg->value);
-
-    // Envia a confirmação (ACK) ao cliente
-    send_ack(sockfd, client_addr, client_len, total_sum, num_reqs);
-}
-
 // Envia a confirmação (ACK) ao cliente
 void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len, int sum, int seq) {
     struct message ack_msg;
@@ -425,7 +388,7 @@ void* process_request_thread(void* arg) {
     write_total_sum(data->msg.value);
 
     // Exibe detalhes da requisição
-        exibirDetalhesRequisicao(&(data->client_addr), data->msg.seq_num, num_reqs, total_sum, "", data->msg.value);
+    exibirDetalhesRequisicao(&(data->client_addr), data->msg.seq_num, num_reqs, total_sum, "", data->msg.value);
 
     // Envia a confirmação (ACK) ao cliente
     send_ack(data->sockfd, &(data->client_addr), data->client_len, total_sum, num_reqs);
