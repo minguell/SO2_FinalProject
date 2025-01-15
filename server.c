@@ -360,7 +360,7 @@ void enviarMensagemLider(int sockfd, struct sockaddr_in *server_addr, socklen_t 
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
-        perror("server erro ao enviar resposta de eleicao");
+        perror("server erro ao enviar mensagem de líder");
     }
    // printf("Servidor conectado");
 }
@@ -542,7 +542,7 @@ void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_ser
     // Responde com o endereço de escuta do servidor
     ssize_t bytes_received = sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
     if ( bytes_received < 0) {
-        perror("server erro ao enviar mensagem de eleicao");
+        perror("server erro ao enviar mensagem de eleicao (sendElectionMessage)");
         exit(EXIT_FAILURE);
     }
 }
@@ -593,6 +593,6 @@ void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t
 
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
-        perror("server erro ao enviar resposta de eleicao");
+        perror("server erro ao enviar resposta de eleicao (handleServerElection)");
     }
 }
