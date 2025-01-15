@@ -207,7 +207,9 @@ void* discovery_handler(void *arg) {
 
             } else {
                 server.im_leader = 1;
-                send_ack(sockfd, &(client_addr), client_len, 0, 0);
+                server_addr.sin_port = htons(listen_port);
+                send_ack(sockfd, &(server_addr), sizeof(server_addr), 0, 0);
+                server_addr.sin_port = htons(disco_port);
             }
         }
 
@@ -601,7 +603,7 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr) {
 
     // Configura o timeout para o recvfrom
     struct timeval timeout;
-    timeout.tv_sec = 12;  // Tempo de espera em segundos (ajuste conforme necessário)
+    timeout.tv_sec = 4;  // Tempo de espera em segundos (ajuste conforme necessário)
     timeout.tv_usec = 0; // Tempo de espera em microssegundos
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
         perror("server erro ao configurar timeout no socket");
