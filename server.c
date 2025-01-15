@@ -191,6 +191,8 @@ void* discovery_handler(void *arg) {
             if(msg.value != server.id_server){
                 newLeader(msg.value);
 
+            } else {
+                server.im_leader = 1;
             }
         }
 
@@ -535,7 +537,7 @@ void newLeader(int leaderId){
 
 void iniciarEleicao(int id_server){
     int sockfd;
-
+    printf("Inicia eleicao");
     // Cria o socket UDP
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("server could not create socket");
