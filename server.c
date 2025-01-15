@@ -58,8 +58,9 @@ int total_sum = 0;
 int num_reqs = 0;
 int listen_port = 0;
 int disco_port = 0;
-//int msg_new_leader = 0;
+int msg_new_leader = 0;
 struct server_data server;
+struct sockaddr_in failClient;
 
 // Prototipação das funções
 void init_client_info();
@@ -196,6 +197,7 @@ void* discovery_handler(void *arg) {
             }
         }
         if (msg.type == 4) {
+            failClient = client_addr;
             // Cria uma thread para lidar com a eleição
             if (pthread_create(&election_thread, NULL, iniciarEleicao, NULL) != 0) {
                 perror("server error creating election thread");
@@ -208,7 +210,7 @@ void* discovery_handler(void *arg) {
 
             } else {
                 server.im_leader = 1;
-                //msg_new_leader = 1;
+                msg_new_leader = 1;
             }
         }
 
@@ -281,14 +283,14 @@ void* listen_handler(void *arg) {
     }
 
     while (1) {
-      /*  if (msg_new_leader == 1 && server.im_leader == 1){
+        if (msg_new_leader == 1 && server.im_leader == 1){
             msg_new_leader = 0;
             struct message msg_newLeader;
             msg_newLeader.type = 10; // New Leader type
             msg_newLeader.seq_num = 0;
             msg_newLeader.value = 0;
-            sendto(sockfd, &msg_newLeader, sizeof(msg_newLeader), 0, (struct sockaddr *)&client_addr, client_len);
-        }*/
+            sendto(sockfd, &msg_newLeader, sizeof(msg_newLeader), 0, (struct sockaddr *)&failClient, sizeof(failClient));
+        }
 
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
 
