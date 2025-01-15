@@ -74,7 +74,7 @@ void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
 void* process_request_thread(void* arg);
 void exibirDetalhesRequisicao(struct sockaddr_in *client_addr, int seq_num, int num_reqs, int total_sum, char* men, int req_val);
-void iniciarEleicao(int id_server);
+void* iniciarEleicao(void* arg);
 void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_server);
 void processElectionResponse(int sockfd, struct sockaddr_in *server_addr);
 int obterTimestampMicrosegundos();
@@ -136,6 +136,7 @@ void* discovery_handler(void *arg) {
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len = sizeof(client_addr);
     char buffer[BUFFER_SIZE];
+    pthread_t election_thread;
 
 
     // Cria o socket UDP para descoberta
@@ -158,7 +159,11 @@ void* discovery_handler(void *arg) {
         pthread_exit(NULL);
     }
 
-    iniciarEleicao(server.id_server);
+    // Cria uma thread para lidar com a eleição
+    if (pthread_create(&election_thread, NULL, iniciarEleicao, NULL) != 0) {
+        perror("server error creating election thread");
+        exit(EXIT_FAILURE);
+    }
 
     while (1) {
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
@@ -182,11 +187,19 @@ void* discovery_handler(void *arg) {
             printf("\n Msg eleicao: %d",msg.value);
             if(msg.value > server.id_server){
                 handleServerElection(sockfd, &client_addr, client_len);
-                iniciarEleicao(server.id_server);
+                // Cria uma thread para lidar com a eleição
+                if (pthread_create(&election_thread, NULL, iniciarEleicao, NULL) != 0) {
+                    perror("server error creating election thread");
+                    exit(EXIT_FAILURE);
+                }
             }
         }
         if (msg.type == 4) {
-                iniciarEleicao(server.id_server);
+            // Cria uma thread para lidar com a eleição
+            if (pthread_create(&election_thread, NULL, iniciarEleicao, NULL) != 0) {
+                perror("server error creating election thread");
+                exit(EXIT_FAILURE);
+            }
         }
         if (msg.type == 6) {
             if(msg.value != server.id_server){
@@ -536,7 +549,8 @@ void newLeader(int leaderId){
     printf("\nID do leader: %d",server.leader_addr);
 }
 
-void iniciarEleicao(int id_server){
+void *iniciarEleicao(void * arg){
+    int id_server = server.id_server;
     int sockfd;
     printf("Inicia eleicao");
     // Cria o socket UDP
