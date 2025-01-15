@@ -215,8 +215,10 @@ void atualizaEstado(int at_req, int at_sum){
 }
 
 void* lider_handler(void *arg) {
-    printf("Lider: %d", server.leader_addr);
-    wait(1500);
+    while(1){
+        printf("Lider: %d", server.leader_addr);
+        wait(1500);
+    }
 }
 
 
