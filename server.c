@@ -444,7 +444,6 @@ void* process_request_thread(void* arg) {
 
 
 void replicar_servidores(){
-    printf("aa");
     int sockfd;
 
     // Cria o socket UDP
@@ -481,7 +480,6 @@ void send_propagation(int sockfd, struct sockaddr_in *server_addr){
 
     // Responde com o endereço de escuta do servidor
     ssize_t bytes_received = sendto(sockfd, &propagation, sizeof(propagation), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
-    printf("%zd", bytes_received);
     if ( bytes_received < 0) {
         perror("server erro ao enviar mensagem de propagação");
         exit(EXIT_FAILURE);
@@ -531,7 +529,6 @@ void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_ser
 
     // Responde com o endereço de escuta do servidor
     ssize_t bytes_received = sendto(sockfd, &election, sizeof(election), 0, (struct sockaddr *)server_addr, sizeof(*server_addr));
-    printf("%zd", bytes_received);
     if ( bytes_received < 0) {
         perror("server erro ao enviar mensagem de eleicao");
         exit(EXIT_FAILURE);
