@@ -85,6 +85,7 @@ void atualizaEstado(int at_req, int at_sum);
 void newLeader(int leaderId);
 void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 void* lider_handler(void *arg);
+void delay(int number_of_seconds);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -214,10 +215,23 @@ void atualizaEstado(int at_req, int at_sum){
     total_sum = at_sum;
 }
 
+void delay(int number_of_seconds)
+{
+    // Converting time into milli_seconds
+    int milli_seconds = 1000 * number_of_seconds;
+
+    // Storing start time
+    clock_t start_time = clock();
+
+    // looping till required time is not achieved
+    while (clock() < start_time + milli_seconds)
+        ;
+}
+
 void* lider_handler(void *arg) {
     while(1){
-        printf("Lider: %d", server.leader_addr);
-        wait(1500);
+        printf("\nLider: %d", server.leader_addr);
+        delay(3000);
     }
 }
 
