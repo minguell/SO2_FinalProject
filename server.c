@@ -84,13 +84,14 @@ void* discovery_propagation(void *arg);
 void atualizaEstado(int at_req, int at_sum);
 void newLeader(int leaderId);
 void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
+void* lider_handler(void *arg);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
     server.im_leader = 0;  
     server.leader_addr = 0;
 
-    pthread_t discovery_thread, listen_thread;
+    pthread_t discovery_thread, listen_thread, lider_thread;
     listen_port = atoi(argv[1]);
     disco_port = listen_port + 1;
     // Inicializa as informações dos clientes
@@ -113,10 +114,17 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Cria uma thread para escutar requisições dos clientes
+    if (pthread_create(&lider_thread, NULL, lider_handler, NULL) != 0) {
+        perror("server error creating lider thread");
+        exit(EXIT_FAILURE);
+    }
+
 
     // Aguarda as threads terminarem (nunca terminam neste caso)
     pthread_join(discovery_thread, NULL);
     pthread_join(listen_thread, NULL);
+    pthread_join(lider_thread, NULL);
 
     return 0;
 }
@@ -205,6 +213,12 @@ void atualizaEstado(int at_req, int at_sum){
     num_reqs = at_req;
     total_sum = at_sum;
 }
+
+void* lider_handler(void *arg) {
+    printf("Lider: %d", server.leader_addr);
+    wait(1500);
+}
+
 
 // Thread para lidar com requisições de clientes
 void* listen_handler(void *arg) {
