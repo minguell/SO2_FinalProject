@@ -208,7 +208,12 @@ void* discovery_handler(void *arg) {
             } else {
                 server.im_leader = 1;
                 server_addr.sin_port = htons(listen_port);
-                send_ack(sockfd, &(server_addr), sizeof(server_addr), 0, 0);
+                struct message newLeader_msg;
+                newLeader_msg.type = 10; // ACK type
+                newLeader_msg.seq_num = 0;
+                newLeader_msg.value = 0;
+                sendto(sockfd, &newLeader_msg, sizeof(newLeader_msg), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+                //send_ack(sockfd, &(server_addr), sizeof(server_addr), 0, 0);
                 server_addr.sin_port = htons(disco_port);
             }
         }
