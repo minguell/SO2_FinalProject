@@ -58,7 +58,7 @@ int total_sum = 0;
 int num_reqs = 0;
 int listen_port = 0;
 int disco_port = 0;
-int msg_new_leader = 0;
+//int msg_new_leader = 0;
 struct server_data server;
 
 // Prototipação das funções
@@ -208,7 +208,7 @@ void* discovery_handler(void *arg) {
 
             } else {
                 server.im_leader = 1;
-                msg_new_leader = 1;
+                //msg_new_leader = 1;
             }
         }
 
@@ -281,21 +281,21 @@ void* listen_handler(void *arg) {
     }
 
     while (1) {
-            if (msg_new_leader == 1 && server.im_leader == 1){
-                msg_new_leader = 0;
-                struct message msg_newLeader;
-                msg_newLeader.type = 10; // New Leader type
-                msg_newLeader.seq_num = 0;
-                msg_newLeader.value = 0;
-                sendto(sockfd, &msg_newLeader, sizeof(msg_newLeader), 0, (struct sockaddr *)&client_addr, client_len);
-            }
+      /*  if (msg_new_leader == 1 && server.im_leader == 1){
+            msg_new_leader = 0;
+            struct message msg_newLeader;
+            msg_newLeader.type = 10; // New Leader type
+            msg_newLeader.seq_num = 0;
+            msg_newLeader.value = 0;
+            sendto(sockfd, &msg_newLeader, sizeof(msg_newLeader), 0, (struct sockaddr *)&client_addr, client_len);
+        }*/
 
-            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
 
-            if (n < 0) {
-                perror("server error receiving client message");
-                continue;
-            }
+        if (n < 0) {
+            perror("server error receiving client message");
+            continue;
+        }
 
         if(server.im_leader == 1){
 
