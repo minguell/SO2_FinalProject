@@ -69,7 +69,7 @@ void exibirStatusInicial(int num_reqs, int total_sum);
 int find_client(struct sockaddr_in *client_addr);
 void update_client_info(int client_index, int seq_num, int value);
 void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len);
-void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
+void enviarMensagemLider(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 void read_total_sum(int *num_reqs, int *total_sum);
 void write_total_sum(int value);
 void* process_request_thread(void* arg);
@@ -82,6 +82,7 @@ void send_propagation(int sockfd, struct sockaddr_in *server_addr);
 void replicar_servidores(void);
 void* discovery_propagation(void *arg);
 void atualizaEstado(int at_req, int at_sum);
+void newLeader(int leaderId);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -93,8 +94,6 @@ int main(int argc, char *argv[]) {
     disco_port = listen_port + 1;
     // Inicializa as informações dos clientes
     init_client_info();
-
-    iniciarEleicao(server.id_server);
 
     // Exibe o status inicial
     exibirStatusInicial(num_reqs, total_sum);
@@ -111,6 +110,8 @@ int main(int argc, char *argv[]) {
         perror("server error creating listen thread");
         exit(EXIT_FAILURE);
     }
+
+    iniciarEleicao(server.id_server);
 
     // Aguarda as threads terminarem (nunca terminam neste caso)
     pthread_join(discovery_thread, NULL);
@@ -167,10 +168,12 @@ void* discovery_handler(void *arg) {
         } 
         if (msg.type == 2) {
             if(msg.value > server.id_server){
-                handle_server_discovery(sockfd, &client_addr, client_len);
                 iniciarEleicao(server.id_server);
             }
-        } 
+        }
+        if (msg.type == 3) {
+                newLeader(msg.value);
+        }
         if (msg.type == 4) {
                 iniciarEleicao(server.id_server);
         }
@@ -182,6 +185,7 @@ void* discovery_handler(void *arg) {
         if (msgRep.type == 5){
             atualizaEstado(msgRep.num_req, msgRep.total_sum);
         }
+
 
     }
 
@@ -261,7 +265,6 @@ void* listen_handler(void *arg) {
             }
         } else{
             printf("em espera");
-            int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         }
     }
 
@@ -334,18 +337,22 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
 }
 
 // Lida com a mensagem de descoberta
-void handle_server_discovery(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len) {
+void enviarMensagemLider(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len) {
 
     struct message response;
     response.type = 3; // Resposta a eleicao
     response.seq_num = 0;
     response.value = server.id_server;
 
+    server.leader_addr = server.id_server;
+
+    printf("\nEu sou o lider. ID: %d",server.leader_addr);
+
     // Responde com o endereço de escuta do servidor
     if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
         perror("server erro ao enviar resposta de eleicao");
     }
-    printf("Servidor conectado");
+   // printf("Servidor conectado");
 }
 
 // Função para leitura do total_sum e num_reqs
@@ -482,7 +489,10 @@ void send_propagation(int sockfd, struct sockaddr_in *server_addr){
 
 }
 
-
+void newLeader(int leaderId){
+    server.leader_addr = leaderId;
+    printf("\nID do leader: %d",server.leader_addr);
+}
 
 void iniciarEleicao(int id_server){
     int sockfd;
@@ -547,6 +557,7 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr) {
             // Timeout ocorreu
             printf("server timeout na espera por resposta de eleicao\n");
             server.im_leader = 1; // Assume liderança se ninguém responder
+            enviarMensagemLider(sockfd, server_addr, addr_len);
         } else {
             // Outro erro ocorreu
             perror("server erro ao receber mensagem de eleicao");
@@ -556,6 +567,7 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr) {
         // Processa a resposta recebida
         if (msg.type != 3) {
             server.im_leader = 1; // Servidor atual é o líder
+            enviarMensagemLider(sockfd, server_addr, addr_len);
         } else {
             server.im_leader = 0; // Outro servidor é o líder
         }
