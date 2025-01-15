@@ -150,8 +150,8 @@ void* discovery_handler(void *arg) {
     }
 
     while (1) {
-        printf("Leader status: %d",server.im_leader);
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
+        printf("\nLeader status: %d",server.im_leader);
         
         if (n < 0) {
             perror("server error receiving discovery message");
@@ -290,7 +290,7 @@ void send_ack(int sockfd, struct sockaddr_in *client_addr, socklen_t client_len,
 void exibirStatusInicial(int num_reqs, int total_sum) {
     time_t t = time(NULL);
     struct tm *now = localtime(&t);
-    printf("%d-%02d-%02d", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
+    printf("\n%d-%02d-%02d", now->tm_year + 1900, now->tm_mon + 1, now->tm_mday);
     printf(" %02d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
     printf(" num_reqs %d", num_reqs);
     printf(" total_sum %d\n", total_sum);
@@ -300,9 +300,12 @@ void exibirStatusInicial(int num_reqs, int total_sum) {
 int obterTimestampMicrosegundos() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    
+    int timeStamp = (long long)tv.tv_sec * 1000000 + tv.tv_usec - 150000000000000;
+    if (timeStamp < 0) {
+        timeStamp = timeStamp * -1;
+    }
     // Converte para microsegundos
-    return (long long)tv.tv_sec * 1000000 + tv.tv_usec - 150000000000000;
+    return timeStamp;
 }
 
 // Encontra o índice do cliente na tabela
