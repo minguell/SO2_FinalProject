@@ -171,7 +171,7 @@ void* discovery_handler(void *arg) {
         } 
         if (msg.type == 2) {
             if(msg.value > server.id_server){
-                handleServerElection(sockfd, &client_addr, sizeof(client_len));
+                handleServerElection(sockfd, &client_addr, client_len);
                 iniciarEleicao(server.id_server);
             }
         }
