@@ -230,7 +230,7 @@ void delay(int number_of_seconds)
 
 void* lider_handler(void *arg) {
     while(1){
-        printf("\nLider: %d", server.leader_addr);
+        printf("\nLider: %d. Sou eu? %d", server.leader_addr, server.im_leader);
         delay(3000);
     }
 }
