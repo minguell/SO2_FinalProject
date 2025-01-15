@@ -488,6 +488,7 @@ void send_propagation(int sockfd, struct sockaddr_in *server_addr){
 }
 
 void newLeader(int leaderId){
+    server.im_leader = 0;
     server.leader_addr = leaderId;
     printf("\nID do leader: %d",server.leader_addr);
 }
