@@ -96,7 +96,7 @@ int main(int argc, char *argv[]) {
     // Inicializa as informações dos clientes
     init_client_info();
 
-    iniciarEleicao(server.id_server);
+    
     // Exibe o status inicial
     exibirStatusInicial(num_reqs, total_sum);
 
@@ -149,6 +149,8 @@ void* discovery_handler(void *arg) {
         pthread_exit(NULL);
     }
 
+    iniciarEleicao(server.id_server);
+
     while (1) {
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         printf("\nLeader status: %d",server.im_leader);
@@ -171,15 +173,16 @@ void* discovery_handler(void *arg) {
             if(msg.value > server.id_server){
                 handleServerElection(sockfd, &client_addr, sizeof(client_len));
                 iniciarEleicao(server.id_server);
-            } else {
-                server.im_leader = 0;
             }
         }
         if (msg.type == 4) {
                 iniciarEleicao(server.id_server);
         }
         if (msg.type == 6) {
+            if(msg.value != server.id_server){
                 newLeader(msg.value);
+
+            }
         }
 
 
@@ -268,7 +271,7 @@ void* listen_handler(void *arg) {
 
             }
         } else{
-            printf("em espera");
+           // printf("em espera");
         }
     }
 
