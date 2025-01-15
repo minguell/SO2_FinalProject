@@ -518,6 +518,7 @@ void iniciarEleicao(int id_server){
     sendElectionMessage(sockfd, &server_addr, id_server);
 
     processElectionResponse(sockfd, &server_addr);
+    close(sockfd);
 }
 
 void sendElectionMessage(int sockfd, struct sockaddr_in *server_addr, int id_server){
