@@ -19,7 +19,6 @@ struct message {
     int type;
     int seq_num;
     int value;
-    long long id_server;
 };
 
 int listen_port = 0;
@@ -78,7 +77,6 @@ void send_discovery_message(int sockfd, struct sockaddr_in *server_addr) {
     msg.type = 0; // Tipo de mensagem de descoberta
     msg.seq_num = 0;
     msg.value = 0;
-    msg.id_server = 0;
 
     // Configura o endereço de broadcast
     memset(server_addr, 0, sizeof(*server_addr));
@@ -112,7 +110,6 @@ void send_number(int sockfd, struct sockaddr_in *server_addr, int number, int se
     msg.type = 1; // Request type
     msg.seq_num = seq_num;
     msg.value = number;
-    msg.id_server = 0;
 
     // Envia o número ao servidor
     if (sendto(sockfd, &msg, sizeof(msg), 0, (struct sockaddr *)server_addr, sizeof(*server_addr)) < 0) {
@@ -221,7 +218,6 @@ void sendKeepAliveMessage(int sockfd, struct sockaddr_in *server_addr) {
     msg.type = 4; // Tipo de mensagem Keep Alive
     msg.seq_num = 0;
     msg.value = 0;
-    msg.id_server = 0;
 
     // Configura o endereço de broadcast
     memset(server_addr, 0, sizeof(*server_addr));
