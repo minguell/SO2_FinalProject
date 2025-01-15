@@ -179,6 +179,7 @@ void* discovery_handler(void *arg) {
             
         } 
         if (msg.type == 2) {
+            printf("\n Msg eleicao: %d",msg.value);
             if(msg.value > server.id_server){
                 handleServerElection(sockfd, &client_addr, client_len);
                 iniciarEleicao(server.id_server);
@@ -265,7 +266,6 @@ void* listen_handler(void *arg) {
     }
 
     while (1) {
-        if(server.im_leader == 1){
             int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
 
             if (n < 0) {
@@ -273,6 +273,7 @@ void* listen_handler(void *arg) {
                 continue;
             }
 
+        if(server.im_leader == 1){
             struct message msg;
             memcpy(&msg, buffer, sizeof(msg));
 
