@@ -13,7 +13,7 @@
 #include <time.h>
 
 #define BUFFER_SIZE 1024
-#define TIMEOUT 4
+#define TIMEOUT 10
 
 struct message {
     int type;
