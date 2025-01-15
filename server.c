@@ -207,6 +207,7 @@ void* discovery_handler(void *arg) {
 
             } else {
                 server.im_leader = 1;
+                send_ack(sockfd, &(client_addr), client_len, 0, 0);
             }
         }
 
