@@ -96,6 +96,7 @@ int main(int argc, char *argv[]) {
     // Inicializa as informações dos clientes
     init_client_info();
 
+    iniciarEleicao(server.id_server);
     // Exibe o status inicial
     exibirStatusInicial(num_reqs, total_sum);
 
@@ -112,7 +113,6 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    iniciarEleicao(server.id_server);
 
     // Aguarda as threads terminarem (nunca terminam neste caso)
     pthread_join(discovery_thread, NULL);
@@ -150,7 +150,7 @@ void* discovery_handler(void *arg) {
     }
 
     while (1) {
-        
+        printf("Leader status: %d",server.im_leader);
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
         
         if (n < 0) {
