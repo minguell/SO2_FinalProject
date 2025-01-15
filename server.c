@@ -83,6 +83,7 @@ void replicar_servidores(void);
 void* discovery_propagation(void *arg);
 void atualizaEstado(int at_req, int at_sum);
 void newLeader(int leaderId);
+void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -168,14 +169,17 @@ void* discovery_handler(void *arg) {
         } 
         if (msg.type == 2) {
             if(msg.value > server.id_server){
+                handleServerElection(sockfd, &server_addr, sizeof(server_addr));
                 iniciarEleicao(server.id_server);
+            } else {
+                server.im_leader = 0;
             }
-        }
-        if (msg.type == 3) {
-                newLeader(msg.value);
         }
         if (msg.type == 4) {
                 iniciarEleicao(server.id_server);
+        }
+        if (msg.type == 6) {
+                newLeader(msg.value);
         }
 
 
@@ -340,7 +344,7 @@ void handle_discovery(int sockfd, struct sockaddr_in *client_addr, socklen_t cli
 void enviarMensagemLider(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len) {
 
     struct message response;
-    response.type = 3; // Resposta a eleicao
+    response.type = 6; // Resposta a eleicao
     response.seq_num = 0;
     response.value = server.id_server;
 
@@ -566,8 +570,22 @@ void processElectionResponse(int sockfd, struct sockaddr_in *server_addr) {
         if (msg.type != 3) {
             server.im_leader = 1; // Servidor atual é o líder
             enviarMensagemLider(sockfd, server_addr, addr_len);
+            printf("Mensagem nao 3 recebida");
         } else {
+            printf("Nao sou lider");
             server.im_leader = 0; // Outro servidor é o líder
         }
+    }
+}
+
+void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len){
+    struct message response;
+    response.type = 3; // Resposta a eleicao
+    response.seq_num = 0;
+    response.value = server.id_server;
+
+    // Responde com o endereço de escuta do servidor
+    if (sendto(sockfd, &response, sizeof(response), 0, (struct sockaddr *)server_addr, server_len) < 0) {
+        perror("server erro ao enviar resposta de eleicao");
     }
 }
