@@ -139,6 +139,13 @@ int main(int argc, char *argv[]) {
 void* newLeader_handler(void *arg){
     int sockfd = *(int *)arg;
 
+    // Configura o socket para permitir broadcast
+    int broadcastEnable = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, sizeof(broadcastEnable)) < 0) {
+        perror("server could not enable broadcast on socket");
+        exit(EXIT_FAILURE);
+    }
+
     // Configura o endereço do servidor
     memset(&failClient, 0, sizeof(failClient));
     failClient.sin_family = AF_INET;
