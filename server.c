@@ -83,7 +83,7 @@ int obterTimestampMicrosegundos();
 void send_propagation(int sockfd, struct sockaddr_in *server_addr);
 void replicar_servidores(void);
 void* discovery_propagation(void *arg);
-void atualizaEstado(int at_req, int at_sum);
+void atualizaEstado(int at_req, int at_sum,client_info clientes_att[NUM_MAX_CLIENT]);
 void newLeader(int leaderId);
 void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 void* lider_handler(void *arg);
@@ -256,7 +256,7 @@ void* discovery_handler(void *arg) {
         memcpy(&msgRep, buffer, sizeof(msgRep));
 
         if (msgRep.type == 5){
-            atualizaEstado(msgRep.num_req, msgRep.total_sum);
+            atualizaEstado(msgRep.num_req, msgRep.total_sum, msgRep.client_info_array);
         }
 
 
@@ -267,9 +267,19 @@ void* discovery_handler(void *arg) {
 }
 
 
-void atualizaEstado(int at_req, int at_sum){
+void atualizaEstado(int at_req, int at_sum, client_info clientes_att[NUM_MAX_CLIENT]){
     num_reqs = at_req;
     total_sum = at_sum;
+
+    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+        if (!client_info_array[i].is_active) {
+            client_info_array[i].client_addr = clientes_att[i].client_addr; 
+            client_info_array[i].client_len = clientes_att[i].client_len; 
+            client_info_array[i].is_active = clientes_att[i].is_active; 
+            client_info_array[i].last_seq_num = clientes_att[i].last_seq_num; 
+            client_info_array[i].partial_sum = clientes_att[i].partial_sum; 
+        }
+    }
 }
 
 void delay(int number_of_seconds)
@@ -582,6 +592,15 @@ void send_propagation(int sockfd, struct sockaddr_in *server_addr){
     propagation.type = 5; // Mensagem de propagação
     propagation.num_req = num_reqs;
     propagation.total_sum = total_sum;
+    for (int i = 0; i < NUM_MAX_CLIENT; i++) {
+        if (!client_info_array[i].is_active) {
+            propagation.client_info_array[i].client_addr = client_info_array[i].client_addr;
+            propagation.client_info_array[i].client_len = client_info_array[i].client_len;
+            propagation.client_info_array[i].is_active = client_info_array[i].is_active;
+            propagation.client_info_array[i].last_seq_num = client_info_array[i].last_seq_num;
+            propagation.client_info_array[i].partial_sum = client_info_array[i].partial_sum;
+        }
+    }
 
     // Configura o endereço de broadcast
     memset(server_addr, 0, sizeof(*server_addr));
