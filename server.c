@@ -88,6 +88,7 @@ void newLeader(int leaderId);
 void handleServerElection(int sockfd, struct sockaddr_in *server_addr, socklen_t server_len);
 void* lider_handler(void *arg);
 void delay(int number_of_seconds);
+void* newLeader_handler(void *arg);
 
 int main(int argc, char *argv[]) {
     server.id_server = obterTimestampMicrosegundos();
@@ -117,11 +118,14 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Cria uma thread para escutar requisições dos clientes
+    // Cria uma thread para operar as eleições
     if (pthread_create(&lider_thread, NULL, lider_handler, NULL) != 0) {
         perror("server error creating lider thread");
         exit(EXIT_FAILURE);
     }
+
+     
+
 
 
     // Aguarda as threads terminarem (nunca terminam neste caso)
@@ -130,6 +134,31 @@ int main(int argc, char *argv[]) {
     pthread_join(lider_thread, NULL);
 
     return 0;
+}
+
+void* newLeader_handler(void *arg){
+    int sockfd = *(int *)arg;
+
+    // Configura o endereço do servidor
+    memset(&failClient, 0, sizeof(failClient));
+    failClient.sin_family = AF_INET;
+    failClient.sin_port = htons(listen_port);
+    failClient.sin_addr.s_addr = htonl(INADDR_BROADCAST); 
+
+    while (1) {
+        if (msg_new_leader == 1 && server.im_leader == 1){
+            printf("\nMensagem novo lider");
+            msg_new_leader = 0;
+            struct message msg_newLeader;
+            msg_newLeader.type = 10; // New Leader type
+            msg_newLeader.seq_num = 0;
+            msg_newLeader.value = 0;
+            sendto(sockfd, &msg_newLeader, sizeof(msg_newLeader), 0, (struct sockaddr *)&failClient, sizeof(failClient));
+        }
+    }
+
+    close(sockfd);
+    pthread_exit(NULL);
 }
 
 // Thread para lidar com mensagens de descoberta
@@ -209,6 +238,7 @@ void* discovery_handler(void *arg) {
                 newLeader(msg.value);
 
             } else {
+                printf("\nI'm leader");
                 server.im_leader = 1;
                 msg_new_leader = 1;
             }
@@ -262,6 +292,7 @@ void* listen_handler(void *arg) {
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len = sizeof(client_addr);
     char buffer[BUFFER_SIZE];
+    pthread_t newLeader_thread;
 
     // Cria o socket UDP para comunicação padrão
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -282,15 +313,14 @@ void* listen_handler(void *arg) {
         pthread_exit(NULL);
     }
 
+    // Cria uma thread para comunicar o nome lider
+    if (pthread_create(&newLeader_thread, NULL, newLeader_handler, (void *)&sockfd) != 0) {
+        perror("server error creating lider thread");
+        exit(EXIT_FAILURE);
+    }
+
     while (1) {
-        if (msg_new_leader == 1 && server.im_leader == 1){
-            msg_new_leader = 0;
-            struct message msg_newLeader;
-            msg_newLeader.type = 10; // New Leader type
-            msg_newLeader.seq_num = 0;
-            msg_newLeader.value = 0;
-            sendto(sockfd, &msg_newLeader, sizeof(msg_newLeader), 0, (struct sockaddr *)&failClient, sizeof(failClient));
-        }
+        printf("listen loop");
 
         int n = recvfrom(sockfd, buffer, BUFFER_SIZE, 0, (struct sockaddr *)&client_addr, &client_len);
 
@@ -298,6 +328,9 @@ void* listen_handler(void *arg) {
             perror("server error receiving client message");
             continue;
         }
+        struct message msg;
+        memcpy(&msg, buffer, sizeof(msg));
+        printf("mensagem %d",msg.value);
 
         if(server.im_leader == 1){
 
